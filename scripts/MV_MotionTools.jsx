@@ -96,6 +96,7 @@
         { label: "エクスポ（強イーズ）",       inn: 88, out: 88 },
         { label: "急発進 → ゆっくり止まる",    inn: 92, out: 8 },
         { label: "ゆっくり → 急停止",          inn: 8,  out: 92 },
+        { label: "スピードランプ（超緩急）",   inn: 100, out: 100 },
         { label: "イーズイン（出発だけ）",     inn: -1, out: 70 },
         { label: "イーズアウト（到着だけ）",   inn: 70, out: -1 },
         { label: "リニア",                     linear: true },

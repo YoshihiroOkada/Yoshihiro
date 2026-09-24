@@ -134,6 +134,7 @@
         { key: "ease", label: "イーズ（なめらか）", out: 75, inn: 75 },
         { key: "expoOut", label: "エクスポ（急発進→ゆっくり止まる）", out: 8, inn: 95 },
         { key: "expoIn", label: "エクスポ（ゆっくり→急停止）", out: 95, inn: 8 },
+        { key: "ramp", label: "スピードランプ（ゆっくり→ビュン→ゆっくり）", out: 100, inn: 100 },
         { key: "linear", label: "リニア", linear: true }
     ];
 
@@ -259,6 +260,48 @@
     var EXPR_SKY_FOLLOW = 'try { add(value, thisComp.activeCamera.toWorld([0, 0, 0])); } catch (err) { value; }';
     var EXPR_TWINKLE = 'seedRandom(index, true);\nvalue * (0.6 + 0.4 * Math.sin(time * random(1, 4) + random(6.28)))';
 
+    // ルックアット: Target と「見続けるレイヤー」を Look At Mix(%) で混ぜる
+    var EXPR_TARGET = [
+        C_REF,
+        'var p = c.effect("Target")(1);',
+        'var m = clamp(c.effect("Look At Mix")(1) / 100, 0, 1);',
+        'if (m > 0) {',
+        '  try {',
+        '    var L = c.effect("Look At Layer")(1);',
+        '    if (L != null && L.index != c.index) p = add(mul(p, 1 - m), mul(L.toWorld(L.anchorPoint), m));',
+        '  } catch (err) {}',
+        '}',
+        'p'
+    ].join("\n");
+
+    // DepthFade: カメラに近すぎる/遠すぎるレイヤーを自動でフェード
+    var EXPR_DEPTH_FADE = [
+        'var nf = 300, fs = 4000, fe = 7000;',
+        'try {',
+        '  var c = thisComp.layer("' + CC + '");',
+        '  nf = c.effect("Fade Near")(1); fs = c.effect("Fade Far Start")(1); fe = c.effect("Fade Far End")(1);',
+        '} catch (err) {}',
+        'try {',
+        '  var d = length(toWorld(anchorPoint), thisComp.activeCamera.toWorld([0, 0, 0]));',
+        '  value * linear(d, 0, Math.max(nf, 1), 0, 1) * linear(d, fs, Math.max(fe, fs + 1), 1, 0);',
+        '} catch (err2) { value; }'
+    ].join("\n");
+
+    function hasFx(layer, name) {
+        return !!layer.property("ADBE Effect Parade").property(name);
+    }
+
+    // 旧バージョンで作ったリグにも後から機能を足せるように
+    function addRigExtras(ctrl) {
+        if (!hasFx(ctrl, "Look At Mix")) addSlider(ctrl, "Look At Mix", 0);
+        if (!hasFx(ctrl, "Look At Layer")) addFx(ctrl, "ADBE Layer Control", "Look At Layer");
+        if (!hasFx(ctrl, "Fade Near")) addSlider(ctrl, "Fade Near", 300);
+        if (!hasFx(ctrl, "Fade Far Start")) addSlider(ctrl, "Fade Far Start", 4000);
+        if (!hasFx(ctrl, "Fade Far End")) addSlider(ctrl, "Fade Far End", 7000);
+        var tg = findLayer(ctrl.containingComp, "CAM_TARGET");
+        if (tg) tr(tg).property("ADBE Position").expression = EXPR_TARGET;
+    }
+
     // =====================================================================
     // [リグ] 3Dカメラリグ
     // =====================================================================
@@ -292,6 +335,7 @@
         addSlider(ctrl, "Focus Distance", dist);
         addSlider(ctrl, "Aperture", 40);
         addSlider(ctrl, "Blur Level", 100);
+        addRigExtras(ctrl);
 
         function rigNull(name, parent) {
             var n = comp.layers.addNull(dur);
@@ -307,7 +351,7 @@
             return n;
         }
         var target = rigNull("CAM_TARGET", null);
-        tr(target).property("ADBE Position").expression = exprCtrl("Target");
+        tr(target).property("ADBE Position").expression = EXPR_TARGET;
         var orbit = rigNull("CAM_ORBIT", target);
         tr(orbit).property("ADBE Rotate Y").expression = exprCtrl("Orbit");
         var tilt = rigNull("CAM_TILT", orbit);
@@ -343,13 +387,7 @@
         layer.selected = true;
     }
 
-    // [リグ] 選択レイヤーへ飛ぶ
-    function flyTo(comp, o) {
-        var ctrl = getCtrl(comp);
-        var sel = selectedAV(comp);
-        if (!sel.length) throw new Error("飛んでいきたいレイヤーを選択してください。");
-        var L = sel[0];
-        var t0 = comp.time, t1 = t0 + o.dur;
+    function flyToLayer(ctrl, L, t0, t1, o) {
         var target = ctrlProp(ctrl, "Target");
         keyMove(target, t0, t1, target.valueAtTime(t0, true), worldPos(ctrl, L, t0), o.ease);
         if (o.matchAngle && L.threeDLayer && !L.parent) {
@@ -360,7 +398,64 @@
             while (v1 - v0 < -180) v1 += 360;
             keyMove(orbit, t0, t1, v0, v1, o.ease);
         }
+    }
+
+    // [リグ] 選択レイヤーへ飛ぶ
+    function flyTo(comp, o) {
+        var ctrl = getCtrl(comp);
+        var sel = selectedAV(comp);
+        if (!sel.length) throw new Error("飛んでいきたいレイヤーを選択してください。");
+        var t1 = comp.time + o.dur;
+        flyToLayer(ctrl, sel[0], comp.time, t1, o);
         comp.time = t1;
+    }
+
+    // [リグ] ターゲット巡回: 選択した順にレイヤーを 移動→停留 で巡る
+    function targetTour(comp, o) {
+        var ctrl = getCtrl(comp);
+        var sel = comp.selectedLayers, list = [];
+        for (var i = 0; i < sel.length; i++) if (sel[i] instanceof AVLayer && sel[i] !== ctrl) list.push(sel[i]);
+        if (!list.length) throw new Error("巡りたいレイヤーを、巡る順番にクリックして選択してください。");
+        var t = comp.time;
+        for (i = 0; i < list.length; i++) {
+            flyToLayer(ctrl, list[i], t, t + o.dur, o);
+            t += o.dur + o.hold;
+        }
+        comp.time = t;
+        return list.length + " 個のレイヤーを巡るカメラワークを作りました（移動 " + o.dur + " 秒 / 停留 " + o.hold + " 秒）。";
+    }
+
+    // [リグ] ルックアット: 選択レイヤーを見続ける（Look At Mix を 0→100 でなめらかに切替）
+    function lookAt(comp, o, on) {
+        var ctrl = getCtrl(comp);
+        addRigExtras(ctrl);
+        var t0 = comp.time, t1 = t0 + o.dur;
+        var mix = ctrlProp(ctrl, "Look At Mix");
+        if (on) {
+            var sel = selectedAV(comp), L = null;
+            for (var i = 0; i < sel.length; i++) if (sel[i] !== ctrl && sel[i].name.indexOf("CAM_") !== 0) { L = sel[i]; break; }
+            if (!L) throw new Error("見続けたいレイヤーを選択してください。");
+            setAt(ctrlProp(ctrl, "Look At Layer"), t0, L.index);
+            keyMove(mix, t0, t1, mix.valueAtTime(t0, true), 100, o.ease);
+        } else {
+            keyMove(mix, t0, t1, mix.valueAtTime(t0, true), 0, o.ease);
+        }
+        comp.time = t1;
+    }
+
+    // [ピント] DepthFade を選択レイヤーに
+    function depthFade(comp) {
+        var ctrl = findLayer(comp, CC);
+        if (ctrl) addRigExtras(ctrl);
+        var sel = selectedAV(comp), n = 0;
+        for (var i = 0; i < sel.length; i++) {
+            var L = sel[i];
+            if (L === ctrl || !L.threeDLayer) continue;
+            tr(L).property("ADBE Opacity").expression = EXPR_DEPTH_FADE;
+            n++;
+        }
+        if (!n) throw new Error("3Dレイヤーを選択してください。");
+        return n + " 個のレイヤーに DepthFade を付けました。距離は CAM_CONTROL の Fade Near / Fade Far Start / Fade Far End で調整できます。";
     }
 
     // =====================================================================
@@ -409,12 +504,27 @@
     // [揺れ/ピント]
     // =====================================================================
     var SHAKES = [
-        { label: "なし",           pos: 0,  rot: 0,   freq: 1.5 },
-        { label: "手持ち（自然）", pos: 6,  rot: 0.6, freq: 1.2 },
-        { label: "歩き",           pos: 14, rot: 1.2, freq: 2.0 },
-        { label: "ドローン（浮遊）", pos: 10, rot: 0.3, freq: 0.35 },
-        { label: "緊張感（細かく）", pos: 4,  rot: 0.8, freq: 6 },
-        { label: "激しい（サビ）", pos: 30, rot: 3,   freq: 5 }
+        { label: "なし",                     pos: 0,  rot: 0,   freq: 1.5 },
+        { label: "手持ち（自然）",           pos: 6,  rot: 0.6, freq: 1.2 },
+        { label: "手持ち（ゆったり）",       pos: 4,  rot: 0.4, freq: 0.6 },
+        { label: "手持ち（ドキュメンタリー）", pos: 10, rot: 1,   freq: 1.8 },
+        { label: "歩き",                     pos: 14, rot: 1.2, freq: 2.0 },
+        { label: "走り",                     pos: 28, rot: 2.5, freq: 3.2 },
+        { label: "ドローン（浮遊）",         pos: 10, rot: 0.3, freq: 0.35 },
+        { label: "水中（ゆらゆら）",         pos: 18, rot: 1.5, freq: 0.25 },
+        { label: "夢の中（ふわっ）",         pos: 12, rot: 0.8, freq: 0.15 },
+        { label: "呼吸（ほぼ静止）",         pos: 2,  rot: 0.2, freq: 0.3 },
+        { label: "緊張感（細かく）",         pos: 4,  rot: 0.8, freq: 6 },
+        { label: "ホラー（不安定）",         pos: 8,  rot: 2,   freq: 3.5 },
+        { label: "車載",                     pos: 6,  rot: 0.5, freq: 8 },
+        { label: "電車",                     pos: 3,  rot: 0.3, freq: 12 },
+        { label: "ヘリ",                     pos: 9,  rot: 0.7, freq: 14 },
+        { label: "ライブ会場（ノリ）",       pos: 16, rot: 1.4, freq: 2.2 },
+        { label: "激しい（サビ）",           pos: 30, rot: 3,   freq: 5 },
+        { label: "爆発の余波",               pos: 45, rot: 4,   freq: 7 },
+        { label: "地震",                     pos: 60, rot: 5,   freq: 10 },
+        { label: "グリッチ（ガタガタ）",     pos: 20, rot: 0,   freq: 24 },
+        { label: "酔っぱらい",               pos: 25, rot: 6,   freq: 0.5 }
     ];
 
     function applyShake(comp, sh) {
@@ -828,6 +938,21 @@
         }), 150);
         var cbAngle = g.add("checkbox", undefined, "向きも合わせる");
         cbAngle.value = true;
+        var pT = tRig.add("panel", undefined, "ターゲット巡回（選んだ順に巡る）");
+        pT.alignChildren = ["left", "top"];
+        g = row(pT);
+        var etHold = field(g, "停留(秒):", "1.5", 4);
+        btn(g, "巡回カメラ作成", run("ターゲット巡回", function (comp) {
+            var o = opts();
+            o.matchAngle = cbAngle.value;
+            o.hold = Math.max(0, num(etHold.text, 1.5));
+            return targetTour(comp, o);
+        }), 130);
+        var pL = tRig.add("panel", undefined, "ルックアット（動きながら選択レイヤーを見続ける）");
+        pL.alignChildren = ["left", "top"];
+        g = row(pL);
+        btn(g, "選択レイヤーを見る", run("ルックアット", function (comp) { lookAt(comp, opts(), true); }), 150);
+        btn(g, "解除", run("ルックアット解除", function (comp) { lookAt(comp, opts(), false); }), 70);
         note(tRig, "CAM_CONTROL のエフェクト（Target / Orbit / Tilt / Roll / Distance / Zoom / Truck X / Pedestal Y）にキーを打って自由に動かせます。");
 
         // --- ムーブ ---
@@ -868,6 +993,8 @@
         btn(g, "選択レイヤーにオートフォーカス", run("フォーカス", function (comp) {
             autoFocus(comp, { aperture: num(etAp.text, 40), keyed: cbKey.value });
         }), 230);
+        g = row(pF);
+        btn(g, "DepthFade（距離でフェード）", run("DepthFade", depthFade), 230);
 
         // --- 立ち絵 ---
         var tChar = tabs.add("tab", undefined, "立ち絵");
