@@ -384,6 +384,19 @@
         'add(value, [Math.sin(time * fr + ph) * sw, -time * sp, 0])'
     ].join("\n");
 
+    // 立ち絵のふわふわ呼吸（レイヤー自身のスライダーで調整）
+    var EXPR_TACHIE_POS = [
+        'var a = effect("Float Amount")(1), s = effect("Float Speed")(1);',
+        'add(value, [0, Math.sin(time * s * 2 * Math.PI) * a, 0])'
+    ].join("\n");
+
+    var EXPR_TACHIE_SCALE = [
+        'var k = 1 + effect("Breath %")(1) / 100 * Math.sin(time * effect("Float Speed")(1) * 2 * Math.PI * 1.3 + 1);',
+        '[value[0], value[1] * k, value[2]]'
+    ].join("\n");
+
+    var EXPR_TACHIE_ROT = 'value + Math.sin(time * effect("Float Speed")(1) * Math.PI + 2) * effect("Sway°")(1)';
+
     // =====================================================================
     // テキストアニメーター（Expression Selector で制御）
     // =====================================================================
@@ -704,6 +717,35 @@
         tr(rig).property("ADBE Rotate Y").expression = exprSway(0.7, 0, 1);
         tr(rig).property("ADBE Rotate Z").expression = exprSway(0.45, 1, 0.5);
 
+        // --- 立ち絵（カメラに固定して常に画面の横にいる） ---
+        if (o.tachiePath) {
+            var tItem = proj.importFile(new ImportOptions(new File(o.tachiePath)));
+            tItem.parentFolder = folder;
+            var tc = comp.layers.add(tItem, dur);
+            tc.name = "TACHIE";
+            addSlider(tc, "Float Amount", 10);
+            addSlider(tc, "Float Speed", 0.35);
+            addSlider(tc, "Breath %", 1.2);
+            addSlider(tc, "Sway°", 0.6);
+            tc.threeDLayer = true;
+            tc.parent = cam;
+            var zBack = 400; // 歌詞より少し奥 → 歌詞が立ち絵の上に重なって読みやすい
+            var kz = (dist + zBack) / dist;
+            var side = o.tachieSide === "left" ? -1 : 1;
+            var tsc = (H * o.tachieHeight / Math.max(1, tItem.height)) * 100 * kz;
+            tr(tc).property("ADBE Anchor Point").setValue([tItem.width / 2, tItem.height, 0]);
+            tr(tc).property("ADBE Orientation").setValue([0, 0, 0]);
+            tr(tc).property("ADBE Rotate X").setValue(0);
+            tr(tc).property("ADBE Rotate Y").setValue(0);
+            tr(tc).property("ADBE Rotate Z").setValue(0);
+            tr(tc).property("ADBE Position").setValue([side * W * 0.3 * kz, (H / 2 + 30) * kz, dist + zBack]);
+            tr(tc).property("ADBE Scale").setValue([tsc, tsc, 100]);
+            tr(tc).property("ADBE Position").expression = EXPR_TACHIE_POS;
+            tr(tc).property("ADBE Scale").expression = EXPR_TACHIE_SCALE;
+            tr(tc).property("ADBE Rotate Z").expression = EXPR_TACHIE_ROT;
+            tc.motionBlur = false;
+        }
+
         // --- 仕上げ（グロー / グレイン / ビネット） ---
         if (o.grade) {
             var adj = comp.layers.addSolid([1, 1, 1], "FX_GRADE", W, H, 1, dur);
@@ -749,6 +791,7 @@
         fontSize: "96", textColor: "#FFFFFF", accentColor: "#FF3D7F", bgColor: "#0B1026",
         cameraStyle: "zigzag", textStyle: "fly",
         spacing: "2400", transition: "0.8", maxChars: "16", seed: "7",
+        tachiePath: "", tachieSide: "right", tachieHeight: "0.95",
         titleCard: "1", dust: "1", dustCount: "120", dof: "1", motionBlur: "1", letterbox: "0", grade: "1",
         title: "", artist: ""
     };
@@ -828,6 +871,18 @@
         var etAud = field(g, "音源ファイル:", S.audioPath, 34);
         browse(g, etAud, "音源ファイルを選択");
 
+        // ②' 立ち絵
+        var p2b = win.add("panel", undefined, "②' 立ち絵（任意・PNG/PSD）");
+        p2b.alignChildren = ["left", "top"];
+        g = row(p2b);
+        var etTachie = field(g, "立ち絵画像:", S.tachiePath, 34);
+        browse(g, etTachie, "立ち絵画像を選択");
+        g = row(p2b);
+        g.add("statictext", undefined, "位置:");
+        var ddSide = g.add("dropdownlist", undefined, ["右", "左"]);
+        ddSide.selection = S.tachieSide === "left" ? 1 : 0;
+        var etTH = field(g, "高さ(画面比):", S.tachieHeight, 4);
+
         // ③ コンポ
         var p3 = win.add("panel", undefined, "③ コンポジション");
         p3.alignChildren = ["left", "top"];
@@ -896,6 +951,8 @@
         var s = {
             mode: rbMk.value ? "markers" : "lrc",
             lyricsPath: trim(etLyr.text), audioPath: trim(etAud.text),
+            tachiePath: trim(etTachie.text), tachieSide: ddSide.selection.index === 1 ? "left" : "right",
+            tachieHeight: etTH.text,
             compName: trim(etName.text) || "MV_Lyrics",
             width: etW.text, height: etH.text, fps: ddFps.selection.text,
             font: trim(etFont.text), fontSize: etSize.text,
@@ -915,6 +972,8 @@
     function toOptions(s) {
         return {
             mode: s.mode, lyricsPath: s.lyricsPath, audioPath: s.audioPath,
+            tachiePath: s.tachiePath, tachieSide: s.tachieSide,
+            tachieHeight: Math.max(0.1, Math.min(2, num(s.tachieHeight, 0.95))),
             compName: s.compName,
             width: Math.max(16, Math.round(num(s.width, 1920))),
             height: Math.max(16, Math.round(num(s.height, 1080))),
