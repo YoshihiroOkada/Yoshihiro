@@ -600,6 +600,565 @@
     }
 
     // =====================================================================
+    // ハロウィン: 小物（プリコンポ。1回作ってどの空間でも使い回す）
+    // =====================================================================
+    var HW = {
+        orange: [1, 0.48, 0.1], orangeDark: [0.72, 0.26, 0.04], face: [1, 0.85, 0.3],
+        stone: [0.36, 0.35, 0.41], stoneDark: [0.17, 0.16, 0.22], ink: [0.05, 0.02, 0.07],
+        purple: [0.55, 0.32, 0.82], moon: [1, 0.92, 0.68], ghost: [0.94, 0.96, 1]
+    };
+
+    function findComp(name) {
+        for (var i = 1; i <= app.project.numItems; i++) {
+            var it = app.project.item(i);
+            if (it instanceof CompItem && it.name === name) return it;
+        }
+        return null;
+    }
+
+    function propComp(comp, name, w, h) {
+        var pc = app.project.items.addComp(name, w, h, 1, comp.duration + 10, comp.frameRate);
+        return pc;
+    }
+
+    // シェイプに「パス＋塗り(＋線)」のグループを追加。座標はレイヤー中央が原点
+    function pathGroup(sl, name, verts, o) {
+        o = o || {};
+        var gi = shapeGroup(sl, name);
+        vecs(sl, gi).addProperty("ADBE Vector Shape - Group");
+        if (o.fill) vecs(sl, gi).addProperty("ADBE Vector Graphic - Fill");
+        if (o.stroke) vecs(sl, gi).addProperty("ADBE Vector Graphic - Stroke");
+        var s = new Shape();
+        s.vertices = verts;
+        if (o.inT) s.inTangents = o.inT;
+        if (o.outT) s.outTangents = o.outT;
+        s.closed = o.open ? false : true;
+        var v = vecs(sl, gi);
+        v.property("ADBE Vector Shape - Group").property("ADBE Vector Shape").setValue(s);
+        if (o.fill) {
+            v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(rgba(o.fill));
+            if (o.fillOpacity !== undefined) v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Opacity").setValue(o.fillOpacity);
+        }
+        if (o.stroke) {
+            var st = v.property("ADBE Vector Graphic - Stroke");
+            st.property("ADBE Vector Stroke Color").setValue(rgba(o.stroke));
+            st.property("ADBE Vector Stroke Width").setValue(o.width || 4);
+            try { st.property("ADBE Vector Stroke Line Cap").setValue(2); } catch (e) {}
+        }
+        return gi;
+    }
+
+    function ellipseGroup(sl, name, center, size, fill, o) {
+        o = o || {};
+        var gi = shapeGroup(sl, name);
+        vecs(sl, gi).addProperty("ADBE Vector Shape - Ellipse");
+        vecs(sl, gi).addProperty("ADBE Vector Graphic - Fill");
+        if (o.stroke) vecs(sl, gi).addProperty("ADBE Vector Graphic - Stroke");
+        var v = vecs(sl, gi);
+        v.property("ADBE Vector Shape - Ellipse").property("ADBE Vector Ellipse Size").setValue(size);
+        v.property("ADBE Vector Shape - Ellipse").property("ADBE Vector Ellipse Position").setValue(center);
+        v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(rgba(fill));
+        if (o.opacity !== undefined) v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Opacity").setValue(o.opacity);
+        if (o.stroke) {
+            v.property("ADBE Vector Graphic - Stroke").property("ADBE Vector Stroke Color").setValue(rgba(o.stroke));
+            v.property("ADBE Vector Graphic - Stroke").property("ADBE Vector Stroke Width").setValue(o.width || 4);
+        }
+        return gi;
+    }
+
+    function rectGroup(sl, name, center, size, fill, o) {
+        o = o || {};
+        var gi = shapeGroup(sl, name);
+        vecs(sl, gi).addProperty("ADBE Vector Shape - Rect");
+        vecs(sl, gi).addProperty("ADBE Vector Graphic - Fill");
+        if (o.stroke) vecs(sl, gi).addProperty("ADBE Vector Graphic - Stroke");
+        var v = vecs(sl, gi);
+        v.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Size").setValue(size);
+        v.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Position").setValue(center);
+        if (o.round) v.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Roundness").setValue(o.round);
+        v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(rgba(fill));
+        if (o.stroke) {
+            v.property("ADBE Vector Graphic - Stroke").property("ADBE Vector Stroke Color").setValue(rgba(o.stroke));
+            v.property("ADBE Vector Graphic - Stroke").property("ADBE Vector Stroke Width").setValue(o.width || 4);
+        }
+        return gi;
+    }
+
+    function glowFx(layer, radius, intensity) {
+        var g = addFx(layer, "ADBE Glo2");
+        setFx(g, "ADBE Glo2-0002", 2, 40);
+        setFx(g, "ADBE Glo2-0003", 3, radius);
+        setFx(g, "ADBE Glo2-0004", 4, intensity);
+        return g;
+    }
+
+    var FLICKER = 'value * (0.78 + 0.22 * noise(time * 7 + index * 13))';
+
+    function hwPumpkin(comp) {
+        var pc = findComp("HW_PUMPKIN");
+        if (pc) return pc;
+        pc = propComp(comp, "HW_PUMPKIN", 420, 400);
+        var body = pc.layers.addShape();
+        body.name = "body";
+        // シェイプは「先に作ったグループほど手前」なので、手前から順に作る
+        pathGroup(body, "stem", [[-14, -95], [14, -95], [22, -160], [2, -170]], { fill: [0.3, 0.24, 0.1] });
+        ellipseGroup(body, "center", [0, 20], [190, 275], HW.orange, { stroke: HW.orangeDark, width: 5 });
+        ellipseGroup(body, "midL", [-62, 25], [200, 260], [0.88, 0.37, 0.06], { stroke: HW.orangeDark, width: 5 });
+        ellipseGroup(body, "midR", [62, 25], [200, 260], [0.88, 0.37, 0.06], { stroke: HW.orangeDark, width: 5 });
+        ellipseGroup(body, "outerL", [-120, 30], [170, 230], HW.orangeDark);
+        ellipseGroup(body, "outerR", [120, 30], [170, 230], HW.orangeDark);
+        var face = pc.layers.addShape();
+        face.name = "face";
+        pathGroup(face, "eyeL", [[-100, -10], [-40, -10], [-72, -70]], { fill: HW.face });
+        pathGroup(face, "eyeR", [[40, -10], [100, -10], [72, -70]], { fill: HW.face });
+        pathGroup(face, "nose", [[-16, 28], [16, 28], [0, 2]], { fill: HW.face });
+        pathGroup(face, "mouth", [[-120, 55], [-88, 72], [-64, 58], [-42, 82], [-16, 64], [0, 88], [16, 64], [42, 82], [64, 58],
+            [88, 72], [120, 55], [96, 108], [44, 130], [0, 136], [-44, 130], [-96, 108]], { fill: HW.face });
+        glowFx(face, 35, 1.4);
+        tr(face).property("ADBE Opacity").expression = FLICKER;
+        return pc;
+    }
+
+    function hwTomb(comp, cross) {
+        var name = cross ? "HW_CROSS" : "HW_TOMB";
+        var pc = findComp(name);
+        if (pc) return pc;
+        pc = propComp(comp, name, 320, 460);
+        var s = pc.layers.addShape();
+        s.name = "stone";
+        if (cross) {
+            rectGroup(s, "v", [0, 20], [64, 420], HW.stone, { stroke: HW.stoneDark, width: 6 });
+            rectGroup(s, "h", [0, -90], [250, 64], HW.stone, { stroke: HW.stoneDark, width: 6 });
+        } else {
+            // 手前から: ひび → 継ぎ目隠し → 下の四角 → 丸い上部
+            pathGroup(s, "crack", [[-80, 70], [-58, 115], [-86, 155], [-64, 200]], { stroke: HW.stoneDark, width: 5, open: true });
+            rectGroup(s, "fill", [0, 110], [238, 230], HW.stone);
+            rectGroup(s, "base", [0, 120], [250, 220], HW.stone, { stroke: HW.stoneDark, width: 6 });
+            rectGroup(s, "top", [0, 10], [250, 420], HW.stone, { round: 125, stroke: HW.stoneDark, width: 6 });
+            var t = pc.layers.addText("R.I.P");
+            var tp = t.property("ADBE Text Properties").property("ADBE Text Document");
+            var td = tp.value;
+            td.fontSize = 64;
+            td.fillColor = HW.stoneDark;
+            td.applyStroke = false;
+            td.justification = ParagraphJustification.CENTER_JUSTIFY;
+            tp.setValue(td);
+            tr(t).property("ADBE Position").setValue([160, 190]);
+        }
+        // 下の方を苔っぽく暗く
+        var moss = pc.layers.addSolid([0.08, 0.1, 0.06], "moss", 320, 460, 1, pc.duration);
+        var r = addFx(moss, "ADBE Ramp");
+        setFx(r, "ADBE Ramp-0001", 1, [160, 250]);
+        setFx(r, "ADBE Ramp-0002", 2, [0, 0, 0, 1]);
+        setFx(r, "ADBE Ramp-0003", 3, [160, 460]);
+        setFx(r, "ADBE Ramp-0004", 4, [1, 1, 1, 1]);
+        moss.blendingMode = BlendingMode.MULTIPLY;
+        moss.preserveTransparency = true;
+        tr(moss).property("ADBE Opacity").setValue(60);
+        return pc;
+    }
+
+    function hwTree(comp) {
+        var pc = findComp("HW_TREE");
+        if (pc) return pc;
+        pc = propComp(comp, "HW_TREE", 1400, 1400);
+        var s = pc.layers.addShape();
+        s.name = "tree";
+        var rng = new Rng(666);
+        var count = 0;
+        function branch(x, y, ang, len, width, depth) {
+            var rad = ang * Math.PI / 180;
+            var x2 = x + Math.cos(rad) * len, y2 = y + Math.sin(rad) * len;
+            var mx = (x + x2) / 2 + rng.range(-len, len) * 0.12, my = (y + y2) / 2 + rng.range(-len, len) * 0.12;
+            pathGroup(s, "b" + (count++), [[x, y], [mx, my], [x2, y2]], { stroke: HW.ink, width: width, open: true });
+            if (depth <= 0) return;
+            var kids = depth > 3 ? 2 : (rng.next() < 0.5 ? 2 : 3);
+            for (var i = 0; i < kids; i++) {
+                // 左右に広がりつつ、全体としては上向きに戻す（傾きすぎ防止）
+                var a2 = ang + (i - (kids - 1) / 2) * 52 + rng.range(-18, 18);
+                a2 += (-90 - a2) * 0.1;
+                branch(x2, y2, a2, len * rng.range(0.7, 0.82), Math.max(3, width * 0.6), depth - 1);
+            }
+        }
+        branch(0, 700, -90, 360, 70, 5);
+        // 根元
+        pathGroup(s, "roots", [[-110, 700], [-30, 620], [30, 620], [120, 700]], { fill: HW.ink });
+        return pc;
+    }
+
+    function hwMansion(comp) {
+        var pc = findComp("HW_MANSION");
+        if (pc) return pc;
+        pc = propComp(comp, "HW_MANSION", 2000, 1300);
+        var s = pc.layers.addShape();
+        s.name = "silhouette";
+        var c = HW.ink;
+        pathGroup(s, "hill", [[-1000, 650], [-700, 420], [-300, 360], [300, 360], [700, 430], [1000, 650]], { fill: c });
+        rectGroup(s, "main", [0, 180], [1100, 420], c);
+        rectGroup(s, "wingL", [-470, 240], [360, 300], c);
+        rectGroup(s, "wingR", [470, 240], [360, 300], c);
+        rectGroup(s, "towerC", [0, -120], [300, 620], c);
+        pathGroup(s, "roofC", [[-190, -420], [190, -420], [0, -640]], { fill: c });
+        rectGroup(s, "towerL", [-620, 20], [200, 520], c);
+        pathGroup(s, "roofL", [[-740, -230], [-500, -230], [-620, -420]], { fill: c });
+        rectGroup(s, "towerR", [620, 20], [200, 520], c);
+        pathGroup(s, "roofR", [[500, -230], [740, -230], [620, -420]], { fill: c });
+        rectGroup(s, "chimney", [300, -40], [60, 200], c);
+        var win = pc.layers.addShape();
+        win.name = "windows";
+        var rng = new Rng(13);
+        var spots = [[-380, 120], [-240, 120], [-100, 120], [100, 120], [240, 120], [380, 120], [-380, 260], [380, 260],
+                     [0, -200], [0, -40], [-620, -60], [620, -60], [-620, 90], [620, 90], [-470, 240], [470, 240]];
+        for (var i = 0; i < spots.length; i++) {
+            if (rng.next() < 0.3) continue; // いくつかは真っ暗
+            rectGroup(win, "w" + i, spots[i], [54, 84], rng.next() < 0.7 ? HW.face : [1, 0.55, 0.2], { round: 18 });
+        }
+        glowFx(win, 30, 1.2);
+        tr(win).property("ADBE Opacity").expression = FLICKER;
+        return pc;
+    }
+
+    function hwMoon(comp) {
+        var pc = findComp("HW_MOON");
+        if (pc) return pc;
+        pc = propComp(comp, "HW_MOON", 800, 800);
+        var s = pc.layers.addShape();
+        s.name = "moon";
+        ellipseGroup(s, "c1", [-120, -90], [130, 110], [0.85, 0.72, 0.45], { opacity: 45 });
+        ellipseGroup(s, "c2", [110, 60], [170, 150], [0.85, 0.72, 0.45], { opacity: 35 });
+        ellipseGroup(s, "c3", [-40, 170], [90, 80], [0.85, 0.72, 0.45], { opacity: 40 });
+        ellipseGroup(s, "disc", [0, 0], [600, 600], HW.moon);
+        glowFx(s, 180, 0.9);
+        return pc;
+    }
+
+    function hwBat(comp) {
+        var pc = findComp("HW_BAT");
+        if (pc) return pc;
+        pc = propComp(comp, "HW_BAT", 280, 140);
+        var s = pc.layers.addShape();
+        s.name = "bat";
+        var wl = [[0, 0], [-40, -34], [-120, -46], [-104, -12], [-88, 2], [-66, -6], [-50, 14], [-24, 6]];
+        var wr = [];
+        for (var i = 0; i < wl.length; i++) wr.push([-wl[i][0], wl[i][1]]);
+        ellipseGroup(s, "eyeL", [-6, -4], [5, 5], [1, 0.2, 0.1]);
+        ellipseGroup(s, "eyeR", [6, -4], [5, 5], [1, 0.2, 0.1]);
+        pathGroup(s, "ears", [[-14, -12], [-10, -30], [-4, -16], [4, -16], [10, -30], [14, -12]], { fill: HW.ink });
+        ellipseGroup(s, "body", [0, 6], [34, 48], HW.ink);
+        var giL = pathGroup(s, "wingL", wl, { fill: HW.ink });
+        var giR = pathGroup(s, "wingR", wr, { fill: HW.ink });
+        var flap = '[value[0], value[1] * (0.2 + 0.8 * Math.abs(Math.sin(time * 15)))]';
+        s.property("ADBE Root Vectors Group").property(giL).property("ADBE Vector Transform Group").property("ADBE Vector Scale").expression = flap;
+        s.property("ADBE Root Vectors Group").property(giR).property("ADBE Vector Transform Group").property("ADBE Vector Scale").expression = flap;
+        return pc;
+    }
+
+    function hwGhost(comp) {
+        var pc = findComp("HW_GHOST");
+        if (pc) return pc;
+        pc = propComp(comp, "HW_GHOST", 300, 360);
+        var s = pc.layers.addShape();
+        s.name = "ghost";
+        ellipseGroup(s, "eyeL", [-36, -36], [28, 40], HW.ink);
+        ellipseGroup(s, "eyeR", [36, -36], [28, 40], HW.ink);
+        ellipseGroup(s, "mouth", [0, 18], [34, 44], HW.ink);
+        pathGroup(s, "body",
+            [[-100, -30], [0, -140], [100, -30], [104, 130], [68, 100], [34, 140], [0, 104], [-34, 140], [-68, 100], [-104, 130]],
+            { fill: HW.ghost, fillOpacity: 88,
+              inT: [[0, 60], [-60, 0], [0, -60], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]],
+              outT: [[0, -60], [60, 0], [0, 60], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] });
+        glowFx(s, 40, 0.7);
+        return pc;
+    }
+
+    function hwCandle(comp) {
+        var pc = findComp("HW_CANDLE");
+        if (pc) return pc;
+        pc = propComp(comp, "HW_CANDLE", 100, 300);
+        var s = pc.layers.addShape();
+        s.name = "candle";
+        rectGroup(s, "wick", [0, -32], [4, 18], [0.15, 0.1, 0.08]);
+        pathGroup(s, "drip", [[-22, -25], [-8, -25], [-10, 10], [-16, 22], [-22, 10]], { fill: [0.97, 0.94, 0.86] });
+        rectGroup(s, "wax", [0, 60], [44, 170], [0.93, 0.89, 0.78]);
+        var f = pc.layers.addShape();
+        f.name = "flame";
+        ellipseGroup(f, "outer", [0, -60], [28, 60], [1, 0.62, 0.15]);
+        ellipseGroup(f, "inner", [0, -54], [13, 28], [1, 0.96, 0.7]);
+        tr(f).property("ADBE Anchor Point").setValue([0, -30]);
+        tr(f).property("ADBE Position").setValue([50, 120]);
+        tr(f).property("ADBE Scale").expression = '[value[0] * (0.9 + 0.12 * noise(time * 9)), value[1] * (0.85 + 0.25 * noise(time * 7 + 3))]';
+        tr(f).property("ADBE Rotate Z").expression = 'noise(time * 5 + 9) * 8';
+        glowFx(f, 40, 1.6);
+        return pc;
+    }
+
+    function hwWall(comp) {
+        var pc = findComp("HW_WALL");
+        if (pc) return pc;
+        pc = propComp(comp, "HW_WALL", 1200, 1400);
+        pc.layers.addSolid([0.12, 0.05, 0.14], "paper", 1200, 1400, 1, pc.duration);
+        var s = pc.layers.addShape();
+        s.name = "stripes";
+        var gi = shapeGroup(s, "stripes");
+        vecs(s, gi).addProperty("ADBE Vector Shape - Rect");
+        vecs(s, gi).addProperty("ADBE Vector Graphic - Fill");
+        vecs(s, gi).addProperty("ADBE Vector Filter - Repeater");
+        var v = vecs(s, gi);
+        v.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Size").setValue([26, 1400]);
+        v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(rgba([0.18, 0.08, 0.2]));
+        v.property("ADBE Vector Filter - Repeater").property("ADBE Vector Repeater Copies").setValue(14);
+        v.property("ADBE Vector Filter - Repeater").property("ADBE Vector Repeater Transform").property("ADBE Vector Repeater Position").setValue([90, 0]);
+        s.property("ADBE Root Vectors Group").property(gi).property("ADBE Vector Transform Group").property("ADBE Vector Position").setValue([-585, 0]);
+        var d = pc.layers.addShape();
+        d.name = "decor";
+        ellipseGroup(d, "eyeL", [-24, -190], [14, 8], [1, 0.3, 0.2]);
+        ellipseGroup(d, "eyeR", [24, -190], [14, 8], [1, 0.3, 0.2]);
+        pathGroup(d, "portrait", [[-70, -40], [-60, -180], [0, -250], [60, -180], [70, -40], [120, 20], [-120, 20]],
+            { fill: [0.16, 0.1, 0.18] });
+        rectGroup(d, "frame", [0, -160], [380, 480], [0.04, 0.02, 0.05], { stroke: [0.55, 0.42, 0.16], width: 22 });
+        rectGroup(d, "rail", [0, 318], [1200, 20], [0.42, 0.3, 0.12]);
+        rectGroup(d, "wainscot", [0, 510], [1200, 380], [0.07, 0.03, 0.08]);
+        return pc;
+    }
+
+    // 小物を3D空間に置く（足元基準・カメラの方を向く・Z方向に無限リサイクル）
+    function placeProp(comp, item, name, pos, scale, o) {
+        var L = comp.layers.add(item, comp.duration);
+        L.name = PREFIX + name;
+        L.threeDLayer = true;
+        tr(L).property("ADBE Anchor Point").setValue([item.width / 2, o && o.center ? item.height / 2 : item.height, 0]);
+        tr(L).property("ADBE Position").setValue(pos);
+        tr(L).property("ADBE Scale").setValue([scale, scale, 100]);
+        if (!o || o.billboard !== false) L.autoOrient = AutoOrientType.CAMERA_OR_POINT_OF_INTEREST;
+        if (o && o.recycleLen) tr(L).property("ADBE Position").expression = exprRecycleZ(o.recycleLen, o.lead || 1500, false, 0, null);
+        if (o && o.fadeLen) tr(L).property("ADBE Opacity").expression = exprFadeByDistance(1, o.fadeLen * 0.6, o.fadeLen * 0.95);
+        return L;
+    }
+
+    // どこへ飛んでも同じ場所に見える空の飾り（月・洋館）
+    function skyProp(comp, item, name, offset, scale) {
+        var L = comp.layers.add(item, comp.duration);
+        L.name = PREFIX + name;
+        L.threeDLayer = true;
+        tr(L).property("ADBE Position").setValue(offset);
+        tr(L).property("ADBE Position").expression = 'try { add(value, thisComp.activeCamera.toWorld([0, 0, 0])); } catch (err) { value; }';
+        tr(L).property("ADBE Scale").setValue([scale, scale, 100]);
+        return L;
+    }
+
+    function hwGround(comp, base, floorY, color) {
+        var g = comp.layers.addSolid(color, PREFIX + "HW_GROUND", 14000, 14000, 1, comp.duration);
+        g.threeDLayer = true;
+        tr(g).property("ADBE Rotate X").setValue(90);
+        tr(g).property("ADBE Position").setValue([base[0], floorY, base[2]]);
+        tr(g).property("ADBE Position").expression = [
+            'try {',
+            '  var p = thisComp.activeCamera.toWorld([0, 0, 0]);',
+            '  [p[0], value[1], p[2] + 4000];',
+            '} catch (err) { value; }'
+        ].join("\n");
+        return g;
+    }
+
+    function hwFog(comp, base, floorY, n, len, rng) {
+        var made = [];
+        for (var i = 0; i < n; i++) {
+            var f = comp.layers.addSolid([1, 1, 1], PREFIX + "HW_FOG_" + (i + 1), 3000, 3000, 1, comp.duration);
+            f.threeDLayer = true;
+            addFx(f, "ADBE Fractal Noise");
+            var tint = addFx(f, "ADBE Tint");
+            setFx(tint, "ADBE Tint-0002", 2, rgba(HW.purple));
+            ellipseMask(f, 1500, 1500, 2900, 2900, 1100);
+            f.blendingMode = BlendingMode.SCREEN;
+            tr(f).property("ADBE Rotate X").setValue(90);
+            tr(f).property("ADBE Scale").setValue([220, 220, 100]);
+            tr(f).property("ADBE Position").setValue([base[0] + rng.range(-2500, 2500), floorY - rng.range(40, 160), base[2] + i * (len / n)]);
+            tr(f).property("ADBE Position").expression = exprRecycleZ(len, 2000, false, 0, null);
+            tr(f).property("ADBE Opacity").setValue(rng.range(30, 50));
+            made.push(f);
+        }
+        return made;
+    }
+
+    // =====================================================================
+    // ハロウィン: 空間
+    // =====================================================================
+    function buildGraveyard(comp, o) {
+        var base = sceneBase(comp);
+        var floorY = base[1] + 700;
+        var rng = new Rng(Math.floor(comp.time * 1000) + 31);
+        var perSide = Math.max(4, Math.round(o.count / 2));
+        var spacing = 650, len = perSide * spacing;
+        var tomb = hwTomb(comp, false), cross = hwTomb(comp, true), pump = hwPumpkin(comp), tree = hwTree(comp);
+        var made = [hwGround(comp, base, floorY, [0.05, 0.03, 0.06])];
+        for (var side = -1; side <= 1; side += 2) {
+            for (var i = 0; i < perSide; i++) {
+                var z = base[2] + i * spacing + rng.range(-200, 200);
+                var r = rng.next(), item, x, sc, nm;
+                if (r < 0.45) { item = tomb; nm = "TOMB"; x = rng.range(450, 1500); sc = rng.range(70, 110); }
+                else if (r < 0.65) { item = cross; nm = "CROSS"; x = rng.range(450, 1600); sc = rng.range(70, 110); }
+                else if (r < 0.85) { item = pump; nm = "PUMPKIN"; x = rng.range(350, 900); sc = rng.range(45, 80); }
+                else { item = tree; nm = "TREE"; x = rng.range(1600, 2800); sc = rng.range(120, 200); }
+                made.push(placeProp(comp, item, "GRAVE_" + nm + "_" + (side < 0 ? "L" : "R") + (i + 1),
+                    [base[0] + side * x, floorY, z], sc, { recycleLen: len, fadeLen: len }));
+            }
+        }
+        made = made.concat(hwFog(comp, base, floorY, 6, len, rng));
+        made.push(skyProp(comp, hwMoon(comp), "HW_MOON", [2200, -2300, 9000], 260));
+        made.push(skyProp(comp, hwMansion(comp), "HW_MANSION", [-1500, -300, 9500], 420));
+        return finish(comp, made, 11);
+    }
+
+    function buildCorridor(comp, o) {
+        var base = sceneBase(comp);
+        var floorY = base[1] + 700;
+        var n = Math.max(4, o.count);
+        var S = 1200, len = n * S, half = 950, wallH = 1400;
+        var wall = hwWall(comp), candle = hwCandle(comp);
+        var made = [];
+        for (var i = 0; i < n; i++) {
+            var z = base[2] + i * S;
+            for (var side = -1; side <= 1; side += 2) {
+                var w = comp.layers.add(wall, comp.duration);
+                w.name = PREFIX + "HALL_WALL_" + (side < 0 ? "L" : "R") + (i + 1);
+                w.threeDLayer = true;
+                tr(w).property("ADBE Position").setValue([base[0] + side * half, floorY - wallH / 2, z]);
+                tr(w).property("ADBE Rotate Y").setValue(90);
+                tr(w).property("ADBE Position").expression = exprRecycleZ(len, S * 1.5, false, 0, null);
+                tr(w).property("ADBE Opacity").expression = exprFadeByDistance(1, len * 0.45, len * 0.85);
+                made.push(w);
+                made.push(placeProp(comp, candle, "HALL_CANDLE_" + (side < 0 ? "L" : "R") + (i + 1),
+                    [base[0] + side * (half - 80), floorY - 560, z + S / 2], 110, { recycleLen: len, lead: S * 1.5, fadeLen: len * 0.9 }));
+            }
+        }
+        var planes = [["HALL_FLOOR", [0.2, 0.03, 0.06], floorY], ["HALL_CEILING", [0.03, 0.01, 0.04], floorY - wallH]];
+        for (var k = 0; k < planes.length; k++) {
+            var p = comp.layers.addSolid(planes[k][1], PREFIX + planes[k][0], half * 2, len, 1, comp.duration);
+            p.threeDLayer = true;
+            tr(p).property("ADBE Rotate X").setValue(90);
+            tr(p).property("ADBE Position").setValue([base[0], planes[k][2], base[2] + len / 2]);
+            tr(p).property("ADBE Position").expression = [
+                'try {',
+                '  var p = thisComp.activeCamera.toWorld([0, 0, 0]);',
+                '  [value[0], value[1], Math.round(p[2] / ' + S + ') * ' + S + ' + ' + (len / 2 - S) + '];',
+                '} catch (err) { value; }'
+            ].join("\n");
+            made.push(p);
+        }
+        // 奥の闇
+        var dark = comp.layers.addSolid([0, 0, 0], PREFIX + "HALL_DARKNESS", half * 2, wallH, 1, comp.duration);
+        dark.threeDLayer = true;
+        tr(dark).property("ADBE Position").setValue([base[0], floorY - wallH / 2, 0]);
+        tr(dark).property("ADBE Position").expression = 'try { [value[0], value[1], thisComp.activeCamera.toWorld([0, 0, 0])[2] + ' + (len * 0.85) + ']; } catch (err) { value; }';
+        made.push(dark);
+        return finish(comp, made, 11);
+    }
+
+    function buildPumpkinField(comp, o) {
+        var base = sceneBase(comp);
+        var floorY = base[1] + 700;
+        var rng = new Rng(Math.floor(comp.time * 1000) + 71);
+        var n = Math.max(6, o.count);
+        var spacing = 420, len = Math.ceil(n / 2) * spacing;
+        var pump = hwPumpkin(comp), tree = hwTree(comp);
+        var made = [hwGround(comp, base, floorY, [0.06, 0.04, 0.03])];
+        for (var i = 0; i < n; i++) {
+            var side = i % 2 === 0 ? -1 : 1;
+            var floating = rng.next() < 0.25;
+            var y = floating ? floorY - rng.range(500, 1300) : floorY;
+            var L = placeProp(comp, pump, "FIELD_PUMPKIN_" + (i + 1),
+                [base[0] + side * rng.range(350, 2200), y, base[2] + Math.floor(i / 2) * spacing + rng.range(-150, 150)],
+                rng.range(40, 95), { recycleLen: len, fadeLen: len });
+            if (floating) {
+                tr(L).property("ADBE Position").expression = [
+                    'seedRandom(index, true);',
+                    'var v = add(value, [0, Math.sin(time * random(0.6, 1.2) + random(6.28)) * 40, 0]);',
+                    'try {',
+                    '  var cp = thisComp.activeCamera.toWorld([0, 0, 0]);',
+                    '  var Ln = ' + f3(len) + ', lead = 1500, d = v[2] - cp[2] + lead;',
+                    '  d = ((d % Ln) + Ln) % Ln;',
+                    '  [v[0], v[1], cp[2] + d - lead];',
+                    '} catch (err) { v; }'
+                ].join("\n");
+            }
+            made.push(L);
+        }
+        for (i = 0; i < 6; i++) {
+            var sd = i % 2 === 0 ? -1 : 1;
+            made.push(placeProp(comp, tree, "FIELD_TREE_" + (i + 1),
+                [base[0] + sd * rng.range(2600, 3400), floorY, base[2] + i * (len / 6)], rng.range(150, 220), { recycleLen: len, fadeLen: len }));
+        }
+        made = made.concat(hwFog(comp, base, floorY, 4, len, rng));
+        made.push(skyProp(comp, hwMoon(comp), "HW_MOON", [-2000, -2400, 9000], 300));
+        made.push(skyProp(comp, hwMansion(comp), "HW_MANSION", [1800, -350, 9500], 380));
+        return finish(comp, made, 11);
+    }
+
+    // コウモリ（横切って飛ぶ）＋おばけ（ふわふわ・すけすけ）
+    function buildCreatures(comp, o) {
+        var rng = new Rng(Math.floor(comp.time * 1000) + 97);
+        var n = Math.max(4, o.count);
+        var bat = hwBat(comp), ghost = hwGhost(comp);
+        var box = [7000, 3000, 7000], ahead = 2500;
+        var made = [];
+        for (var i = 0; i < n; i++) {
+            var isGhost = i % 4 === 3;
+            var L = comp.layers.add(isGhost ? ghost : bat, comp.duration + 10);
+            L.name = PREFIX + (isGhost ? "GHOST_" : "BAT_") + (i + 1);
+            L.startTime = -rng.range(0, 5); // 羽ばたきのタイミングをずらす
+            L.threeDLayer = true;
+            L.autoOrient = AutoOrientType.CAMERA_OR_POINT_OF_INTEREST;
+            tr(L).property("ADBE Position").setValue([rng.range(-box[0] / 2, box[0] / 2), rng.range(-box[1] / 2, box[1] / 2) - 300, rng.range(-box[2] / 2, box[2] / 2)]);
+            var vx = isGhost ? 'random(-60, 60)' : '(random() < 0.5 ? -1 : 1) * random(350, 800)';
+            tr(L).property("ADBE Position").expression = [
+                'seedRandom(index, true);',
+                'var vx = ' + vx + ', vy = random(-40, 40), fr = random(0.5, 1.4), ph = random(6.28);',
+                'var bob = ' + (isGhost ? '70' : '35') + ';',
+                'var p = add(value, [time * vx, time * vy + Math.sin(time * fr * 3 + ph) * bob, Math.cos(time * fr + ph) * 120]);',
+                'try {',
+                '  var cp = thisComp.activeCamera.toWorld([0, 0, 0]);',
+                '  var B = ' + arr(box) + ', off = [0, -300, ' + ahead + '], r = [];',
+                '  for (var i = 0; i < 3; i++) {',
+                '    var d = p[i] - cp[i] - off[i] + B[i] / 2;',
+                '    d = ((d % B[i]) + B[i]) % B[i];',
+                '    r.push(cp[i] + off[i] + d - B[i] / 2);',
+                '  }',
+                '  r;',
+                '} catch (err) { p; }'
+            ].join("\n");
+            var sc = isGhost ? rng.range(60, 120) : rng.range(35, 80);
+            tr(L).property("ADBE Scale").setValue([sc, sc, 100]);
+            if (isGhost) {
+                tr(L).property("ADBE Opacity").expression = 'seedRandom(index, true);\nvalue * (0.35 + 0.45 * (0.5 + 0.5 * Math.sin(time * random(0.8, 1.6) + random(6.28))))';
+                tr(L).property("ADBE Rotate Z").expression = 'seedRandom(index, true);\nMath.sin(time * random(1, 2)) * 10';
+            }
+            made.push(L);
+        }
+        return finish(comp, made, 11);
+    }
+
+    // 紫×オレンジのハロウィン色調
+    function buildHalloweenGrade(comp) {
+        var adj = comp.layers.addSolid([1, 1, 1], PREFIX + "HW_GRADE", comp.width, comp.height, 1, comp.duration);
+        adj.adjustmentLayer = true;
+        var tt = addFx(adj, "ADBE Tritone");
+        setFx(tt, "ADBE Tritone-0001", 1, [1, 0.72, 0.4, 1]);
+        setFx(tt, "ADBE Tritone-0002", 2, [0.42, 0.18, 0.55, 1]);
+        setFx(tt, "ADBE Tritone-0003", 3, [0.03, 0.01, 0.06, 1]);
+        setFx(tt, "ADBE Tritone-0004", 4, 55);
+        glowFx(adj, 60, 0.6);
+        var vig = comp.layers.addSolid([0.05, 0, 0.08], PREFIX + "HW_VIGNETTE", comp.width, comp.height, 1, comp.duration);
+        var m = ellipseMask(vig, comp.width / 2, comp.height / 2, comp.width * 1.1, comp.height * 1.3, comp.width * 0.35);
+        m.inverted = true;
+        tr(vig).property("ADBE Opacity").setValue(75);
+        vig.moveToBeginning();
+        adj.moveToBeginning();
+        var ctrl = findLayer(comp, "MV_CONTROL") || findLayer(comp, "CAM_CONTROL");
+        if (ctrl) ctrl.moveToBeginning();
+        return "ハロウィン色調（紫×オレンジ）とビネットを一番上に追加しました。強さは STG_HW_GRADE の Tritone「元の画像とブレンド」で調整できます。";
+    }
+
+    // =====================================================================
     // 削除
     // =====================================================================
     function removeStage(comp) {
@@ -624,7 +1183,12 @@
         { key: "stage", label: "ライブステージ", count: 8, note: "LEDウォール＋スポットライト＋もや（個数 = ライトの数）。" },
         { key: "clouds", label: "雲海＋月", count: 10, note: "雲の上を飛ぶ空間（個数 = 雲の枚数）。" },
         { key: "particles", label: "パーティクル", count: 150, note: "桜・雪・光の粒。カメラの周りに常に舞います。" },
-        { key: "pano", label: "パノラマ背景", count: 16, note: "横長の背景イラストを選択して実行（個数 = 分割数）。" }
+        { key: "pano", label: "パノラマ背景", count: 16, note: "横長の背景イラストを選択して実行（個数 = 分割数）。" },
+        { key: "hw_grave", label: "【ハロウィン】ハロウィン墓地", count: 24, note: "墓石・十字架・枯れ木・カボチャ・紫の霧・月・丘の上の洋館（個数 = 小物の数）。" },
+        { key: "hw_hall", label: "【ハロウィン】洋館の廊下", count: 8, note: "壁紙・肖像画・ろうそくの廊下。奥は闇に消える（個数 = 廊下の区画数）。" },
+        { key: "hw_field", label: "【ハロウィン】カボチャ畑", count: 30, note: "光るカボチャが並び、いくつかは宙に浮かぶ。月と洋館付き（個数 = カボチャの数）。" },
+        { key: "hw_creatures", label: "【ハロウィン】コウモリ＆おばけ", count: 24, note: "コウモリが横切り、おばけがふわふわ漂う（4体に1体がおばけ）。" },
+        { key: "hw_grade", label: "【ハロウィン】ハロウィン色調", count: 1, note: "紫×オレンジの色調補正＋ビネットを一番上に追加。" }
     ];
 
     function run(label, fn) {
@@ -728,6 +1292,11 @@
             if (k.key === "stage") return buildStage(comp, o);
             if (k.key === "clouds") return buildClouds(comp, o);
             if (k.key === "particles") return buildParticles(comp, o);
+            if (k.key === "hw_grave") return buildGraveyard(comp, o);
+            if (k.key === "hw_hall") return buildCorridor(comp, o);
+            if (k.key === "hw_field") return buildPumpkinField(comp, o);
+            if (k.key === "hw_creatures") return buildCreatures(comp, o);
+            if (k.key === "hw_grade") return buildHalloweenGrade(comp);
             return buildPanorama(comp, o);
         });
         var bDel = g.add("button", undefined, "STG_ を全部削除");
