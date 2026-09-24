@@ -93,8 +93,11 @@
     }
 
     // 作ったレイヤーの共通処理（名前・シャイ・ラベル・背景より上へ）
+    var LAST_MADE = []; // 直近の生成で作ったレイヤー（表示区間の設定に使う）
+
     function finish(comp, layers, label) {
         var bg = findLayer(comp, "BG_GRADIENT");
+        for (var j = 0; j < layers.length; j++) LAST_MADE.push(layers[j]);
         for (var i = 0; i < layers.length; i++) {
             var L = layers[i];
             L.shy = true;
@@ -926,7 +929,8 @@
         var L = comp.layers.add(item, comp.duration);
         L.name = PREFIX + name;
         L.threeDLayer = true;
-        tr(L).property("ADBE Anchor Point").setValue([item.width / 2, o && o.center ? item.height / 2 : item.height, 0]);
+        var ay = (o && o.top) ? 0 : (o && o.center ? item.height / 2 : item.height);
+        tr(L).property("ADBE Anchor Point").setValue([item.width / 2, ay, 0]);
         tr(L).property("ADBE Position").setValue(pos);
         tr(L).property("ADBE Scale").setValue([scale, scale, 100]);
         if (!o || o.billboard !== false) L.autoOrient = AutoOrientType.CAMERA_OR_POINT_OF_INTEREST;
@@ -1153,9 +1157,387 @@
         tr(vig).property("ADBE Opacity").setValue(75);
         vig.moveToBeginning();
         adj.moveToBeginning();
+        LAST_MADE.push(adj);
+        LAST_MADE.push(vig);
         var ctrl = findLayer(comp, "MV_CONTROL") || findLayer(comp, "CAM_CONTROL");
         if (ctrl) ctrl.moveToBeginning();
         return "ハロウィン色調（紫×オレンジ）とビネットを一番上に追加しました。強さは STG_HW_GRADE の Tritone「元の画像とブレンド」で調整できます。";
+    }
+
+    // =====================================================================
+    // 仮面舞踏会: 小物
+    // =====================================================================
+    var MQ = {
+        gold: [0.86, 0.68, 0.28], goldDark: [0.5, 0.36, 0.1], marble: [0.88, 0.85, 0.79], marbleDark: [0.7, 0.66, 0.6],
+        crimson: [0.56, 0.04, 0.1], crimsonDark: [0.32, 0.01, 0.06], wax: [0.95, 0.91, 0.8], flame: [1, 0.66, 0.2],
+        crystal: [0.85, 0.95, 1], silhouette: [0.04, 0.02, 0.06]
+    };
+
+    function groupXform(sl, gi) {
+        return sl.property("ADBE Root Vectors Group").property(gi).property("ADBE Vector Transform Group");
+    }
+
+    function mqPillar(comp) {
+        var pc = findComp("MQ_PILLAR");
+        if (pc) return pc;
+        pc = propComp(comp, "MQ_PILLAR", 420, 1700);
+        var s = pc.layers.addShape();
+        s.name = "pillar";
+        // 手前から: 柱頭の渦巻き → 柱頭・柱礎 → 溝 → 柱身
+        ellipseGroup(s, "scrollL", [-138, -742], [64, 64], MQ.gold, { stroke: MQ.goldDark, width: 5 });
+        ellipseGroup(s, "scrollR", [138, -742], [64, 64], MQ.gold, { stroke: MQ.goldDark, width: 5 });
+        rectGroup(s, "capTop", [0, -770], [330, 50], MQ.gold, { stroke: MQ.goldDark, width: 4 });
+        rectGroup(s, "capNeck", [0, -720], [270, 44], MQ.gold, { stroke: MQ.goldDark, width: 4 });
+        rectGroup(s, "baseTop", [0, 725], [270, 44], MQ.gold, { stroke: MQ.goldDark, width: 4 });
+        rectGroup(s, "baseBottom", [0, 780], [340, 70], MQ.gold, { stroke: MQ.goldDark, width: 4 });
+        var gi = shapeGroup(s, "flutes");
+        vecs(s, gi).addProperty("ADBE Vector Shape - Rect");
+        vecs(s, gi).addProperty("ADBE Vector Graphic - Fill");
+        vecs(s, gi).addProperty("ADBE Vector Filter - Repeater");
+        var v = vecs(s, gi);
+        v.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Size").setValue([10, 1360]);
+        v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(rgba(MQ.marbleDark));
+        v.property("ADBE Vector Filter - Repeater").property("ADBE Vector Repeater Copies").setValue(6);
+        v.property("ADBE Vector Filter - Repeater").property("ADBE Vector Repeater Transform").property("ADBE Vector Repeater Position").setValue([36, 0]);
+        groupXform(s, gi).property("ADBE Vector Position").setValue([-90, 0]);
+        rectGroup(s, "shaft", [0, 0], [230, 1420], MQ.marble);
+        return pc;
+    }
+
+    function mqChandelier(comp) {
+        var pc = findComp("MQ_CHANDELIER");
+        if (pc) return pc;
+        pc = propComp(comp, "MQ_CHANDELIER", 1000, 900);
+        // 炎（手前のレイヤー・光る・ゆらめく）
+        var tips = [[-360, 60], [-200, 90], [200, 90], [360, 60], [-250, -60], [-90, -40], [90, -40], [250, -60]];
+        var s = pc.layers.addShape();
+        s.name = "frame";
+        var fl = pc.layers.addShape(); // 後から作ったレイヤーが上＝炎が手前
+        fl.name = "flames";
+        var i;
+        for (i = 0; i < tips.length; i++) {
+            ellipseGroup(fl, "f" + i, [tips[i][0], tips[i][1] - 62], [16, 34], MQ.flame);
+        }
+        glowFx(fl, 45, 1.8);
+        tr(fl).property("ADBE Opacity").expression = FLICKER;
+        // 本体（手前から: ろうそく → クリスタル → 腕 → 胴体 → 鎖）
+        for (i = 0; i < tips.length; i++) {
+            rectGroup(s, "c" + i, [tips[i][0], tips[i][1] - 24], [16, 48], MQ.wax);
+            rectGroup(s, "cup" + i, [tips[i][0], tips[i][1] + 2], [44, 12], MQ.gold);
+        }
+        var drops = [[-300, 140], [-150, 170], [0, 250], [150, 170], [300, 140], [-230, 30], [230, 30], [-75, 60], [75, 60], [0, 150]];
+        for (i = 0; i < drops.length; i++) {
+            ellipseGroup(s, "d" + i, drops[i], [12, 28], MQ.crystal, { opacity: 85 });
+            rectGroup(s, "dl" + i, [drops[i][0], drops[i][1] - 30], [2, 34], MQ.crystal);
+        }
+        for (i = 0; i < tips.length; i++) {
+            var tx = tips[i][0], ty = tips[i][1];
+            // 胴体の下から外へ垂れ下がり、先端でろうそくへ跳ね上がるS字の腕
+            var mx = tx * 0.6, my = ty + (ty > 0 ? 120 : 150);
+            pathGroup(s, "arm" + i, [[0, 30], [mx, my], [tx, ty]], {
+                stroke: MQ.gold, width: 11, open: true,
+                inT: [[0, 0], [-tx * 0.3, 0], [0, 50]],
+                outT: [[tx * 0.15, 40], [tx * 0.3, 0], [0, 0]] });
+        }
+        ellipseGroup(s, "ring", [0, 60], [520, 90], MQ.gold, { opacity: 0, stroke: MQ.gold, width: 7 });
+        pathGroup(s, "bowl", [[-110, 20], [110, 20], [60, 110], [0, 140], [-60, 110]], { fill: MQ.gold, stroke: MQ.goldDark, width: 4 });
+        ellipseGroup(s, "body", [0, -60], [110, 170], MQ.gold, { stroke: MQ.goldDark, width: 5 });
+        rectGroup(s, "chain", [0, -300], [12, 320], MQ.goldDark);
+        glowFx(s, 20, 0.5);
+        return pc;
+    }
+
+    function mqCurtain(comp) {
+        var pc = findComp("MQ_CURTAIN");
+        if (pc) return pc;
+        pc = propComp(comp, "MQ_CURTAIN", 800, 1600);
+        var s = pc.layers.addShape();
+        s.name = "curtain";
+        // 手前から: タッセル → 上飾り（スカラップ） → ひだ
+        ellipseGroup(s, "tieL", [-300, 150], [70, 50], MQ.gold, { stroke: MQ.goldDark, width: 4 });
+        ellipseGroup(s, "tieR", [300, 150], [70, 50], MQ.gold, { stroke: MQ.goldDark, width: 4 });
+        rectGroup(s, "rod", [0, -770], [800, 24], MQ.gold);
+        for (var i = 0; i < 5; i++) {
+            ellipseGroup(s, "scallop" + i, [-320 + i * 160, -700], [170, 120], MQ.crimson, { stroke: MQ.gold, width: 8 });
+        }
+        rectGroup(s, "valance", [0, -730], [800, 60], MQ.crimson);
+        // 左右に寄せたカーテン（タッセルで絞った形）。手前のひだから作る
+        var sides = [-1, 1];
+        for (var k = 0; k < 2; k++) {
+            var sd = sides[k];
+            for (var f = 2; f >= 0; f--) {
+                var inTop = sd * (400 - 260 + f * 70), inTie = sd * (330 + f * 15), inBot = sd * (400 - 220 + f * 60);
+                var col = f % 2 === 0 ? MQ.crimson : MQ.crimsonDark;
+                pathGroup(s, "fold" + k + f, [[sd * 400, -760], [inTop, -760], [inTie, 150], [inBot, 800], [sd * 400, 800]], {
+                    fill: col,
+                    inT: [[0, 0], [0, 0], [sd * -40, -300], [0, -250], [0, 0]],
+                    outT: [[0, 0], [0, 300], [sd * -40, 250], [0, 0], [0, 0]] });
+            }
+        }
+        return pc;
+    }
+
+    function mqMask(comp) {
+        var pc = findComp("MQ_MASK");
+        if (pc) return pc;
+        pc = propComp(comp, "MQ_MASK", 700, 760);
+        var s = pc.layers.addShape();
+        s.name = "mask";
+        // 手前から: 宝石 → 目の穴 → 金の飾り → 仮面 → 羽根
+        ellipseGroup(s, "gem", [0, -30], [30, 38], [0.8, 0.05, 0.2], { stroke: MQ.gold, width: 5 });
+        ellipseGroup(s, "eyeL", [-95, 30], [112, 58], [0.02, 0, 0.03], { stroke: MQ.gold, width: 6 });
+        ellipseGroup(s, "eyeR", [95, 30], [112, 58], [0.02, 0, 0.03], { stroke: MQ.gold, width: 6 });
+        pathGroup(s, "curlL", [[-160, -20], [-200, -50], [-230, -10], [-200, 10]], { stroke: MQ.gold, width: 5, open: true });
+        pathGroup(s, "curlR", [[160, -20], [200, -50], [230, -10], [200, 10]], { stroke: MQ.gold, width: 5, open: true });
+        pathGroup(s, "mask", [[-240, 0], [-160, -60], [-60, -40], [0, -10], [60, -40], [160, -60], [240, 0], [210, 70],
+            [130, 110], [50, 80], [0, 100], [-50, 80], [-130, 110], [-210, 70]], { fill: [0.16, 0.04, 0.24], stroke: MQ.gold, width: 8 });
+        var feathers = [[[-150, -40], [-210, -170], [-230, -300], [-170, -190], [-120, -60]],
+                        [[-120, -50], [-140, -200], [-120, -330], [-95, -200], [-90, -60]],
+                        [[-180, -30], [-280, -130], [-340, -240], [-250, -150], [-160, -20]]];
+        var fc = [[0.45, 0.1, 0.6], [0.85, 0.2, 0.5], MQ.gold];
+        for (var i = 0; i < feathers.length; i++) {
+            pathGroup(s, "feather" + i, feathers[i], { fill: fc[i], stroke: MQ.goldDark, width: 3 });
+        }
+        glowFx(s, 15, 0.4);
+        return pc;
+    }
+
+    function mqDancers(comp) {
+        var pc = findComp("MQ_DANCERS");
+        if (pc) return pc;
+        pc = propComp(comp, "MQ_DANCERS", 700, 1000);
+        var s = pc.layers.addShape();
+        s.name = "dancers";
+        var c = MQ.silhouette;
+        // 小さな金の仮面（手前）
+        rectGroup(s, "maskW", [55, -352], [58, 14], MQ.gold, { round: 7 });
+        rectGroup(s, "maskM", [-70, -412], [62, 14], MQ.gold, { round: 7 });
+        // 女性: 頭・胴・ドレス
+        ellipseGroup(s, "headW", [55, -350], [66, 82], c);
+        pathGroup(s, "hairW", [[20, -370], [55, -400], [95, -380], [100, -330], [80, -300]], { fill: c });
+        pathGroup(s, "torsoW", [[30, -305], [85, -305], [90, -160], [25, -160]], { fill: c });
+        pathGroup(s, "gown", [[25, -170], [95, -170], [260, 470], [120, 440], [0, 480], [-120, 450], [-150, 470]], { fill: c });
+        // 男性: 頭・胴・脚・腕（女性の腰と手へ）
+        ellipseGroup(s, "headM", [-70, -410], [70, 86], c);
+        pathGroup(s, "torsoM", [[-120, -360], [-20, -360], [-10, -60], [-130, -60]], { fill: c });
+        pathGroup(s, "legs", [[-130, -70], [-10, -70], [-20, 480], [-60, 480], [-70, 60], [-90, 480], [-130, 480]], { fill: c });
+        // ワルツの組み方: 男性の右手は女性の背中、左手と女性の右手を横でつなぐ
+        pathGroup(s, "armM", [[-30, -330], [30, -250], [60, -230]], { stroke: c, width: 30, open: true });
+        pathGroup(s, "armHold", [[-120, -335], [-200, -330], [-215, -385]], { stroke: c, width: 24, open: true });
+        pathGroup(s, "armW", [[35, -290], [-60, -300], [-190, -390]], { stroke: c, width: 20, open: true });
+        return pc;
+    }
+
+    function mqFloor(comp, base, floorY) {
+        var sq = 320;
+        var n = 36;
+        var bgc = comp.layers.addSolid([0.04, 0.02, 0.04], PREFIX + "MQ_FLOOR_BASE", sq * n, sq * n, 1, comp.duration);
+        var sl = comp.layers.addShape();
+        sl.name = PREFIX + "MQ_FLOOR_TILES";
+        for (var k = 0; k < 2; k++) {
+            var gi = shapeGroup(sl, "tiles" + k);
+            vecs(sl, gi).addProperty("ADBE Vector Shape - Rect");
+            vecs(sl, gi).addProperty("ADBE Vector Graphic - Fill");
+            vecs(sl, gi).addProperty("ADBE Vector Filter - Repeater");
+            vecs(sl, gi).addProperty("ADBE Vector Filter - Repeater");
+            var v = vecs(sl, gi);
+            v.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Size").setValue([sq, sq]);
+            v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(rgba(MQ.marble));
+            v.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Opacity").setValue(80);
+            v.property(3).property("ADBE Vector Repeater Copies").setValue(n / 2);
+            v.property(3).property("ADBE Vector Repeater Transform").property("ADBE Vector Repeater Position").setValue([sq * 2, 0]);
+            v.property(4).property("ADBE Vector Repeater Copies").setValue(n / 2);
+            v.property(4).property("ADBE Vector Repeater Transform").property("ADBE Vector Repeater Position").setValue([0, sq * 2]);
+            var off = -sq * n / 2 + sq / 2 + k * sq;
+            groupXform(sl, gi).property("ADBE Vector Position").setValue([off, off]);
+        }
+        var follow = [
+            'try {',
+            '  var p = thisComp.activeCamera.toWorld([0, 0, 0]);',
+            '  var st = ' + (sq * 2) + ';',
+            '  [Math.round(p[0] / st) * st, value[1], Math.round(p[2] / st) * st + ' + (sq * n * 0.3) + '];',
+            '} catch (err) { value; }'
+        ].join("\n");
+        var out = [bgc, sl];
+        for (var i = 0; i < out.length; i++) {
+            out[i].threeDLayer = true;
+            tr(out[i]).property("ADBE Rotate X").setValue(90);
+            tr(out[i]).property("ADBE Position").setValue([base[0], floorY - i, base[2]]);
+            tr(out[i]).property("ADBE Position").expression = follow;
+        }
+        return out;
+    }
+
+    // =====================================================================
+    // 仮面舞踏会: 会場
+    // =====================================================================
+    function buildMasquerade(comp, o) {
+        var base = sceneBase(comp);
+        var floorY = base[1] + 700;
+        var rng = new Rng(Math.floor(comp.time * 1000) + 131);
+        var n = Math.max(4, Math.round(o.count / 2));
+        var spacing = 1100, len = n * spacing, half = 1500;
+        var pillar = mqPillar(comp), curtain = mqCurtain(comp), chand = mqChandelier(comp), dancers = mqDancers(comp), mask = mqMask(comp);
+        var made = mqFloor(comp, base, floorY);
+        var rec = { recycleLen: len, lead: spacing * 1.5, fadeLen: len, billboard: false };
+        for (var i = 0; i < n; i++) {
+            var z = base[2] + i * spacing;
+            for (var side = -1; side <= 1; side += 2) {
+                var sname = side < 0 ? "L" : "R";
+                made.push(placeProp(comp, pillar, "MQ_PILLAR_" + sname + (i + 1), [base[0] + side * half, floorY, z], 110, rec));
+                var cu = placeProp(comp, curtain, "MQ_CURTAIN_" + sname + (i + 1), [base[0] + side * (half + 150), floorY, z + spacing / 2], 105, rec);
+                tr(cu).property("ADBE Rotate Y").setValue(90);
+                made.push(cu);
+            }
+            if (i % 2 === 0) {
+                var ch = placeProp(comp, chand, "MQ_CHANDELIER_" + (i / 2 + 1), [base[0] + rng.range(-200, 200), floorY - 2500, z + spacing / 2], 120,
+                    { recycleLen: len, lead: spacing * 1.5, fadeLen: len, top: true });
+                tr(ch).property("ADBE Rotate Z").expression = 'seedRandom(index, true);\nMath.sin(time * random(0.4, 0.7) + random(6.28)) * 2.5';
+                made.push(ch);
+            }
+        }
+        // ワルツを踊るカップル（その場でくるくる回りながら小さな円を描く）
+        var couples = Math.max(4, Math.round(n * 1.2));
+        for (i = 0; i < couples; i++) {
+            var sx = (i % 2 === 0 ? -1 : 1) * rng.range(250, 1100);
+            var d = placeProp(comp, dancers, "MQ_DANCERS_" + (i + 1), [base[0] + sx, floorY, base[2] + (i / couples) * len], rng.range(85, 105), rec);
+            tr(d).property("ADBE Rotate Y").expression = 'seedRandom(index, true);\nvalue + time * random(50, 80) * (random() < 0.5 ? -1 : 1)';
+            tr(d).property("ADBE Position").expression = [
+                'seedRandom(index, true);',
+                'var r = random(60, 140), w = random(0.4, 0.7), ph = random(6.28);',
+                'var v = add(value, [Math.cos(time * w + ph) * r, 0, Math.sin(time * w + ph) * r]);',
+                'try {',
+                '  var cp = thisComp.activeCamera.toWorld([0, 0, 0]);',
+                '  var Ln = ' + f3(len) + ', lead = ' + f3(spacing * 1.5) + ', dd = v[2] - cp[2] + lead;',
+                '  dd = ((dd % Ln) + Ln) % Ln;',
+                '  [v[0], v[1], cp[2] + dd - lead];',
+                '} catch (err) { v; }'
+            ].join("\n");
+            made.push(d);
+        }
+        // 宙に浮かぶ仮面（色違い）
+        var masks = Math.max(4, Math.round(n * 1.5));
+        var box = [4200, 2200, 6000];
+        for (i = 0; i < masks; i++) {
+            var m = comp.layers.add(mask, comp.duration);
+            m.name = PREFIX + "MQ_MASK_" + (i + 1);
+            m.threeDLayer = true;
+            m.autoOrient = AutoOrientType.CAMERA_OR_POINT_OF_INTEREST;
+            tr(m).property("ADBE Position").setValue([rng.range(-box[0] / 2, box[0] / 2), rng.range(-box[1] / 2, box[1] / 2), rng.range(-box[2] / 2, box[2] / 2)]);
+            tr(m).property("ADBE Position").expression = exprRecycleBox(box, 2500, -15, 15, 90);
+            var sc = rng.range(35, 70);
+            tr(m).property("ADBE Scale").setValue([sc, sc, 100]);
+            tr(m).property("ADBE Rotate Z").expression = 'seedRandom(index, true);\nMath.sin(time * random(0.5, 1) + random(6.28)) * 12';
+            try {
+                var hue = addFx(m, "ADBE Color Balance (HLS)", "Mask Color");
+                setFx(hue, "ADBE Color Balance (HLS)-0001", 1, rng.range(-180, 180));
+            } catch (e) {}
+            made.push(m);
+        }
+        var count = finish(comp, made, 9);
+        // 金の紙吹雪
+        count += buildParticles(comp, { type: "neon", count: Math.max(40, n * 10), color: [1, 0.8, 0.35] });
+        return count;
+    }
+
+    function buildMasqueradeGrade(comp) {
+        var adj = comp.layers.addSolid([1, 1, 1], PREFIX + "MQ_GRADE", comp.width, comp.height, 1, comp.duration);
+        adj.adjustmentLayer = true;
+        var tt = addFx(adj, "ADBE Tritone");
+        setFx(tt, "ADBE Tritone-0001", 1, [1, 0.88, 0.6, 1]);
+        setFx(tt, "ADBE Tritone-0002", 2, [0.55, 0.1, 0.16, 1]);
+        setFx(tt, "ADBE Tritone-0003", 3, [0.04, 0.01, 0.03, 1]);
+        setFx(tt, "ADBE Tritone-0004", 4, 55);
+        glowFx(adj, 80, 0.7);
+        adj.moveToBeginning();
+        var ctrl = findLayer(comp, "MV_CONTROL") || findLayer(comp, "CAM_CONTROL");
+        if (ctrl) ctrl.moveToBeginning();
+        LAST_MADE.push(adj);
+        return "仮面舞踏会の色調（深紅×金）を一番上に追加しました。";
+    }
+
+    // =====================================================================
+    // 表示区間（サビだけ／サビ以外／ワークエリアだけ）
+    // =====================================================================
+    var SECTIONS = [
+        { key: "all", label: "全部の時間" },
+        { key: "chorus", label: "サビ（歌詞の ! 行）だけ" },
+        { key: "verse", label: "サビ以外" },
+        { key: "work", label: "ワークエリアだけ" }
+    ];
+
+    // 歌詞ビルダーの強調行レイヤー LYRIC_###_! から区間を集めて、近いものはまとめる
+    function chorusRanges(comp) {
+        var r = [];
+        for (var i = 1; i <= comp.numLayers; i++) {
+            var L = comp.layer(i);
+            if (/^LYRIC_\d+_!$/.test(L.name)) r.push([L.inPoint, L.outPoint]);
+        }
+        r.sort(function (a, b) { return a[0] - b[0]; });
+        var out = [];
+        for (i = 0; i < r.length; i++) {
+            if (out.length && r[i][0] - out[out.length - 1][1] < 1.5) out[out.length - 1][1] = Math.max(out[out.length - 1][1], r[i][1]);
+            else out.push([r[i][0], r[i][1]]);
+        }
+        return out;
+    }
+
+    function sectionSlider(comp, name, ranges) {
+        var host = findLayer(comp, PREFIX + "SECTIONS");
+        if (!host) {
+            host = comp.layers.addNull(comp.duration);
+            host.name = PREFIX + "SECTIONS";
+            host.label = 2;
+        }
+        var fxp = host.property("ADBE Effect Parade");
+        var fx = fxp.property(name);
+        if (!fx) {
+            fx = fxp.addProperty("ADBE Slider Control");
+            fx.name = name;
+        }
+        var p = host.property("ADBE Effect Parade").property(name).property(1);
+        while (p.numKeys > 0) p.removeKey(1);
+        var fade = 0.35;
+        p.setValueAtTime(0, 0);
+        for (var i = 0; i < ranges.length; i++) {
+            var a = Math.max(0, ranges[i][0] - fade), b = ranges[i][1];
+            p.setValueAtTime(a, 0);
+            p.setValueAtTime(a + fade, 100);
+            p.setValueAtTime(Math.max(a + fade + 0.01, b), 100);
+            p.setValueAtTime(Math.max(a + fade + 0.02, b + fade), 0);
+        }
+        host.shy = true;
+        return name;
+    }
+
+    function applySection(comp, layers, mode) {
+        if (mode === "all" || !layers.length) return "";
+        var name, ranges;
+        if (mode === "work") {
+            ranges = [[comp.workAreaStart, comp.workAreaStart + comp.workAreaDuration]];
+            name = "Range " + ranges[0][0].toFixed(2) + "-" + ranges[0][1].toFixed(2);
+        } else {
+            ranges = chorusRanges(comp);
+            if (!ranges.length) throw new Error("サビ（! 行）の歌詞レイヤー LYRIC_…_! が見つかりません。\n歌詞ビルダーで作ったコンポで実行するか、「ワークエリアだけ」を使ってください。");
+            name = "Chorus";
+        }
+        sectionSlider(comp, name, ranges);
+        var g = 'thisComp.layer("' + PREFIX + 'SECTIONS").effect("' + name + '")(1) / 100';
+        if (mode === "verse") g = '(1 - ' + g + ')';
+        for (var i = 0; i < layers.length; i++) {
+            var L = layers[i];
+            var op = tr(L).property("ADBE Opacity");
+            if (L.adjustmentLayer || !op.expression) {
+                op.expression = 'value * ' + g;
+            } else {
+                // 既にエクスプレッションがある不透明度は壊さず、Transform エフェクトの不透明度で切り替える
+                var fx = addFx(L, "ADBE Geometry2", "Section Gate");
+                exprFx(fx, "ADBE Geometry2-0009", 9, 'value * ' + g);
+            }
+        }
+        var list = [];
+        for (i = 0; i < ranges.length; i++) list.push(ranges[i][0].toFixed(1) + "〜" + ranges[i][1].toFixed(1) + "秒");
+        return "\n表示区間: " + list.join(" / ") + (mode === "verse" ? " 以外" : "");
     }
 
     // =====================================================================
@@ -1188,7 +1570,9 @@
         { key: "hw_hall", label: "【ハロウィン】洋館の廊下", count: 8, note: "壁紙・肖像画・ろうそくの廊下。奥は闇に消える（個数 = 廊下の区画数）。" },
         { key: "hw_field", label: "【ハロウィン】カボチャ畑", count: 30, note: "光るカボチャが並び、いくつかは宙に浮かぶ。月と洋館付き（個数 = カボチャの数）。" },
         { key: "hw_creatures", label: "【ハロウィン】コウモリ＆おばけ", count: 24, note: "コウモリが横切り、おばけがふわふわ漂う（4体に1体がおばけ）。" },
-        { key: "hw_grade", label: "【ハロウィン】ハロウィン色調", count: 1, note: "紫×オレンジの色調補正＋ビネットを一番上に追加。" }
+        { key: "hw_grade", label: "【ハロウィン】色調", count: 1, note: "紫×オレンジの色調補正＋ビネットを一番上に追加。" },
+        { key: "mq_ball", label: "【仮面舞踏会】会場", count: 12, note: "市松の大理石の床・金の柱・赤いカーテン・シャンデリア・踊るカップル・浮かぶ仮面・金の紙吹雪（個数 = 柱の数）。" },
+        { key: "mq_grade", label: "【仮面舞踏会】色調", count: 1, note: "深紅×金の色調補正＋グローを一番上に追加。" }
     ];
 
     function run(label, fn) {
@@ -1264,6 +1648,12 @@
         ddPart.selection = 0;
         var cbFull = g.add("checkbox", undefined, "パノラマを一周(360°)");
         cbFull.value = true;
+        g = row(pO);
+        g.add("statictext", undefined, "表示区間:");
+        var secItems = [];
+        for (i = 0; i < SECTIONS.length; i++) secItems.push(SECTIONS[i].label);
+        var ddSec = g.add("dropdownlist", undefined, secItems);
+        ddSec.selection = 0;
 
         ddKind.onChange = function () {
             var k = KINDS[ddKind.selection.index];
@@ -1287,17 +1677,24 @@
                 fullCircle: cbFull.value,
                 size: 0
             };
-            if (k.key === "tunnel") return buildTunnel(comp, o);
-            if (k.key === "city") return buildCity(comp, o);
-            if (k.key === "stage") return buildStage(comp, o);
-            if (k.key === "clouds") return buildClouds(comp, o);
-            if (k.key === "particles") return buildParticles(comp, o);
-            if (k.key === "hw_grave") return buildGraveyard(comp, o);
-            if (k.key === "hw_hall") return buildCorridor(comp, o);
-            if (k.key === "hw_field") return buildPumpkinField(comp, o);
-            if (k.key === "hw_creatures") return buildCreatures(comp, o);
-            if (k.key === "hw_grade") return buildHalloweenGrade(comp);
-            return buildPanorama(comp, o);
+            LAST_MADE = [];
+            var res;
+            if (k.key === "tunnel") res = buildTunnel(comp, o);
+            else if (k.key === "city") res = buildCity(comp, o);
+            else if (k.key === "stage") res = buildStage(comp, o);
+            else if (k.key === "clouds") res = buildClouds(comp, o);
+            else if (k.key === "particles") res = buildParticles(comp, o);
+            else if (k.key === "hw_grave") res = buildGraveyard(comp, o);
+            else if (k.key === "hw_hall") res = buildCorridor(comp, o);
+            else if (k.key === "hw_field") res = buildPumpkinField(comp, o);
+            else if (k.key === "hw_creatures") res = buildCreatures(comp, o);
+            else if (k.key === "hw_grade") res = buildHalloweenGrade(comp);
+            else if (k.key === "mq_ball") res = buildMasquerade(comp, o);
+            else if (k.key === "mq_grade") res = buildMasqueradeGrade(comp);
+            else res = buildPanorama(comp, o);
+            var sec = applySection(comp, LAST_MADE, SECTIONS[ddSec.selection.index].key);
+            if (typeof res === "number") res = res + " 個のレイヤーで「" + k.label + "」を作りました（STG_… / シャイで非表示）。";
+            return res + sec;
         });
         var bDel = g.add("button", undefined, "STG_ を全部削除");
         bDel.preferredSize = [140, 30];
