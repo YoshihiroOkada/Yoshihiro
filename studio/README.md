@@ -10,7 +10,9 @@ npm i                                            # Playwright（1.56.1）
 python tools/beats.py ../audio/song.wav > build/beats.json     # 曲の拍を測る
 node tools/build_timeline.mjs --lrc ../samples/sample.lrc       # タイムライン・shotlist・captions.srt
 node tools/fetch_fonts.mjs                       # 使う文字だけのフォント
-OPENAI_API_KEY=... node tools/gen_assets.mjs     # 画像を生成（ChatGPT / OpenAI 画像API）
+OPENAI_API_KEY=... node tools/gen_assets.mjs     # 画像を生成（ChatGPT / OpenAI 画像API・有料）
+# 無料: docs/asset_prompts_chatgpt.md を ChatGPT アプリに貼って作り、assets/img/<id>.png に置いて↓
+node tools/register_assets.mjs                   # 置いた画像を登録
 node tools/critique.mjs                          # コンタクトシート・スマホテスト・機械チェック
 node render.mjs --format 16x9                    # 9x16 / 1x1 / --reduced（動きを抑えた版）
 node tools/mux.mjs --video out/silent_16x9.mp4 --audio ../audio/song.wav --out out/final_16x9.mp4

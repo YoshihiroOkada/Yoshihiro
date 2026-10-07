@@ -23,3 +23,4 @@
 - 2026-10-07 字幕の帯を下端12%に。講座の「360px 幅で読める」に合わせ、字幕 64px（16:9 で 360px 幅だと 12px）を検証で確かめる。
 - 2026-10-07 X 版の記事（図 14 枚を含む）も確認。場面の切り替え（サビへの移動）を小節の頭に合わせるようにした。図の「C Mixed（生成画像＋コード合成）がミュージックビデオ向き」と今の方針が一致。
 - 2026-10-07 画像生成の既定モデルを gpt-image-2 に（gpt-image-1 は 2026-10-23 提供終了予定）。API を使わない手段として、ChatGPT アプリで作った画像を置いて登録する tools/register_assets.mjs を追加。
+- 2026-10-07 当面は無料で進める（ユーザー決定）。画像は ChatGPT アプリで手作り → assets/img/ に置いて register_assets.mjs で登録。貼るプロンプトは tools/print_prompts.mjs が asset_list.json から docs/asset_prompts_chatgpt.md に書き出す。
