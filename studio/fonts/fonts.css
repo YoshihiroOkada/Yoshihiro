@@ -1,0 +1,12 @@
+@font-face {
+  font-family: 'Noto Serif JP';
+  font-style: normal;
+  font-weight: 700;
+  src: url(NotoSerifJP-700-0.woff2) format('truetype');
+}
+@font-face {
+  font-family: 'Noto Sans JP';
+  font-style: normal;
+  font-weight: 500;
+  src: url(NotoSansJP-500-0.woff2) format('truetype');
+}

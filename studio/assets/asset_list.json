@@ -1,0 +1,30 @@
+{
+  "_note": "MVの絵はすべて OpenAI 画像APIで生成（図形で代用しない）。style は全部の画像に付く共通の指示（docs/style_guide.md と同じ内容）",
+  "style": "Flat 2.5D cut-paper shadow-puppet illustration with crisp edges, subtle paper grain. Strictly limited palette: warm charcoal #1C1915, dark umber #29241F, taupe line #4A433B, warm grey #A39A8E, bone white #F2EDE4, and pumpkin orange #E8823A used ONLY for light sources. No other saturated colors. No text, no letters, no logos, no neon, no glow or bloom, no lens flare, no particles, no gradient sky, not photographic, not glossy 3D.",
+  "cutout": "Single isolated object on a fully transparent background, centered, the whole object visible with margin, no ground shadow, no floor.",
+  "plate": "Wide establishing background plate, 3:2, empty foreground band at the bottom 20% for captions, horizon at about 60% height, nothing important in the corners.",
+  "assets": [
+    { "id": "bg_graveyard", "role": "plate", "size": "1536x1024",
+      "prompt": "A Halloween night graveyard on a gentle hill, a haunted mansion silhouette on the far hilltop with a few windows lit in pumpkin orange, a large pale moon in warm grey, crooked fence, distant tombstones. Quiet and lonely." },
+    { "id": "bg_ballroom", "role": "plate", "size": "1536x1024",
+      "prompt": "Inside the same haunted mansion: a grand masquerade ballroom at night, tall arched windows showing the same moon, checkered stone floor in umber and taupe, rows of columns, heavy curtains in umber, candlelight in pumpkin orange only. Empty room waiting for dancers." },
+    { "id": "mask", "role": "cutout", "size": "1024x1024",
+      "prompt": "An elegant Venetian masquerade eye mask with feathers, in bone white and taupe with charcoal eye holes, one small pumpkin-orange gem on the forehead. Front view, slightly tilted. This is the hero object of the film." },
+    { "id": "tomb", "role": "cutout", "size": "1024x1536",
+      "prompt": "A weathered rounded-top tombstone with a crack, in umber and taupe, no inscription." },
+    { "id": "cross", "role": "cutout", "size": "1024x1536",
+      "prompt": "A tilted old stone cross grave marker in umber and taupe, no inscription." },
+    { "id": "tree", "role": "cutout", "size": "1024x1536",
+      "prompt": "A bare twisted dead tree silhouette with spreading branches, in taupe line color." },
+    { "id": "pumpkin_lit", "role": "cutout", "size": "1024x1024",
+      "prompt": "A carved jack-o'-lantern with a friendly-mysterious face, shell in umber and taupe, the carved eyes and mouth glowing flat pumpkin orange (flat color, no bloom)." },
+    { "id": "light", "role": "cutout", "size": "1024x1024",
+      "prompt": "A single small candle flame shape in flat pumpkin orange with a bone-white core, no candle, no glow halo." },
+    { "id": "pillar", "role": "cutout", "size": "1024x1536",
+      "prompt": "A tall classical ballroom column with simple capital and base, in umber with taupe fluting, front view." },
+    { "id": "chandelier", "role": "cutout", "size": "1536x1024",
+      "prompt": "An ornate hanging candle chandelier with curved arms in taupe, eight candles with flat pumpkin-orange flames, hanging chain at the top." },
+    { "id": "dancers", "role": "cutout", "size": "1024x1536",
+      "prompt": "A waltzing couple in masquerade masks as an elegant silhouette in taupe and umber, woman in a long ball gown, man in a tailcoat, mid-turn." }
+  ]
+}
