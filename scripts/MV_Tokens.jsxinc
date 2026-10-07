@@ -1,0 +1,74 @@
+// MV_Tokens.jsxinc — 全スクリプト共通のデザイントークン（brand/TOKENS.md と同じ値に保つ）
+// 各スクリプトと同じフォルダに置き、#include "MV_Tokens.jsxinc" で読み込む。
+var MV_TOKENS = {
+    color: {
+        ground:       [0x1C / 255, 0x19 / 255, 0x15 / 255],
+        groundRaised: [0x29 / 255, 0x24 / 255, 0x1F / 255],
+        line:         [0x4A / 255, 0x43 / 255, 0x3B / 255],
+        muted:        [0xA3 / 255, 0x9A / 255, 0x8E / 255],
+        ink:          [0xF2 / 255, 0xED / 255, 0xE4 / 255],
+        accent:       [0xE8 / 255, 0x82 / 255, 0x3A / 255]
+    },
+    font: {
+        display: ["NotoSerifJP-Bold", "YuMincho-Demibold", "HiraMinProN-W6"],
+        text:    ["NotoSansJP-Medium", "YuGothic-Medium", "HiraginoSans-W4"]
+    },
+    // 1080p 基準。他の解像度は高さに比例させる
+    type: { display: 120, caption: 64, emphasisScale: 1.3, maxChars: 12, maxLines: 2 },
+    grid: { columns: 12, margin: 0.08, gutter: 0.02, baseline: 8, captionBand: 0.10 },
+    motion: {
+        settleOut: 33, settleIn: 85,   // KeyframeEase の影響（%）。速度は 0、バウンス無し
+        cameraMove: 0.8, textIn: 0.5, textOut: 0.35, stagger: 0.03
+    },
+    a11y: { minContrast: 4.5, maxFlashesPerSecond: 3 }
+};
+
+// WCAG のコントラスト比
+function mvContrast(a, b) {
+    function lum(c) {
+        var r = [];
+        for (var i = 0; i < 3; i++) r.push(c[i] <= 0.03928 ? c[i] / 12.92 : Math.pow((c[i] + 0.055) / 1.055, 2.4));
+        return 0.2126 * r[0] + 0.7152 * r[1] + 0.0722 * r[2];
+    }
+    var la = lum(a), lb = lum(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+// 入っているフォントを候補順に探す（AE 2023+ の app.fonts があれば使う）。見つからなければ第1候補
+function mvPickFont(list) {
+    try {
+        if (app.fonts && app.fonts.getFontsByPostScriptName) {
+            for (var i = 0; i < list.length; i++) {
+                var f = app.fonts.getFontsByPostScriptName(list[i]);
+                if (f && f.length) return list[i];
+            }
+        }
+    } catch (e) {}
+    return list[0];
+}
+
+// 1080p 基準の値を、コンポの高さに合わせてベースラインに丸める
+function mvScale(v, compHeight) {
+    var s = v * compHeight / 1080;
+    var b = MV_TOKENS.grid.baseline * compHeight / 1080;
+    return Math.max(b, Math.round(s / b) * b);
+}
+
+// グリッド: カラム n（1始まり）の左端 x
+function mvColumnX(n, compWidth) {
+    var g = MV_TOKENS.grid;
+    var inner = compWidth * (1 - 2 * g.margin);
+    var gut = compWidth * g.gutter;
+    var colW = (inner - gut * (g.columns - 1)) / g.columns;
+    return compWidth * g.margin + (n - 1) * (colW + gut);
+}
+
+// シード固定の乱数（Math.random は使わない）
+function MvRng(seed) {
+    var s = Math.abs(Math.floor(seed)) % 4294967296 || 12345;
+    this.next = function () {
+        s = (s * 1664525 + 1013904223) % 4294967296;
+        return s / 4294967296;
+    };
+}
+MvRng.prototype.range = function (a, b) { return a + (b - a) * this.next(); };

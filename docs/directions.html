@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MV Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;800&family=Noto+Serif+JP:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #F4F0E8; --fg: #221E1A; --muted: #5E564C; --line: #D8D0C3; --win: #A9481A; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1C1915; --fg: #F2EDE4; --muted: #A39A8E; --line: #3A342D; --win: #E8823A; } }
+  :root[data-theme="dark"] { --bg: #1C1915; --fg: #F2EDE4; --muted: #A39A8E; --line: #3A342D; --win: #E8823A; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 "Noto Sans JP", "IPAPGothic", sans-serif; }
+  main { max-width: 1160px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 24px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  .card.win { border: 2px solid var(--win); }
+  .card h2 { font-size: 17px; margin: 0 0 2px; display: flex; gap: 8px; align-items: center; }
+  .badge { font-size: 12px; color: var(--bg); background: var(--win); border-radius: 4px; padding: 0 6px; }
+  .frames { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .frames svg { width: 100%; height: auto; display: block; border-radius: 4px; }
+  .cap { font-size: 12px; color: var(--muted); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 8px 0 0; font-size: 13px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; }
+  .log { margin-top: 32px; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>方向性 4案（workflow 3）</h1>
+  <p class="lead">同じ2場面（Aメロ＝墓場 / サビ＝舞踏会）を4つの方向性で。どれも「温かい中間色の地＋アクセント1色・書体2つ・グリッド1つ」の範囲内。</p>
+  <div class="grid" id="grid"></div>
+  <section class="log">
+    <h2 style="font-size:17px">決定</h2>
+    <p><b>A「灯」を採用。</b> 理由: ① アクセント＝カボチャの灯で、同じ灯が舞踏会のろうそくに変わるので「物を消さずに変形してつなぐ」が自然にできる。② 夜の曲なので暗い地が合い、コントラストは 15.0:1 / 6.4:1 で余裕がある。③ 明朝のキーワードが仮面舞踏会の格調に合う。</p>
+    <p class="cap">B は昼の絵本のようで夜の物語が弱い。C は影だけで立ち絵（本物の素材）が沈む。D は中央の大きな文字が強すぎて、立ち絵と競合する。</p>
+  </section>
+</main>
+<script>
+const dirs = [
+  { id: "A", name: "灯（ランタン）", win: true, ground: "#1C1915", raised: "#29241F", line: "#4A433B", ink: "#F2EDE4", muted: "#A39A8E", accent: "#E8823A",
+    display: "'Noto Serif JP', serif", align: "left", note: "暗い温中間色。灯だけがアクセント。キーワードは明朝で左寄せ（カラム2〜7）。",
+    cr: "ink 15.02 / accent 6.41 / 字幕 6.31" },
+  { id: "B", name: "紙（ペーパー）", ground: "#EFE8DC", raised: "#E2D8C8", line: "#C9BCA8", ink: "#221E1A", muted: "#5E564C", accent: "#A9481A",
+    display: "'Noto Serif JP', serif", align: "left", note: "明るい紙の地に墨のシルエット。絵本の語り口。",
+    cr: "ink 13.59 / accent 4.75 / 字幕 5.92" },
+  { id: "C", name: "影絵", ground: "#14110E", raised: "#1E1A16", line: "#2C2722", ink: "#EDE6DA", muted: "#9C9387", accent: "#E8823A",
+    display: "'Noto Sans JP', sans-serif", weight: 800, align: "left", note: "ほぼ黒の地に影だけ。ゴシック極太のキーワード。",
+    cr: "ink 15.17 / accent 6.88 / 字幕 6.21" },
+  { id: "D", name: "石版", ground: "#2B2620", raised: "#3A332B", line: "#5A5147", ink: "#F2EDE4", muted: "#B0A699", accent: "#F0904A",
+    display: "'Noto Serif JP', serif", align: "center", note: "中間の明るさ。キーワードを中央に大きく（カラム2〜11）。",
+    cr: "ink 12.86 / accent 6.28 / 字幕 6.25" }
+];
+// 1920x1080 を 480x270 に縮小して描く（12カラム・マージン8%のグリッドに配置）
+function frame(d, scene) {
+  const W = 480, H = 270, m = W * 0.08, gut = W * 0.02, colW = (W - 2 * m - gut * 11) / 12;
+  const col = n => m + (n - 1) * (colW + gut);
+  const word = scene === "verse" ? "走り出した" : "届け";
+  const caption = scene === "verse" ? "夜を越えて 走り出した" : "届け 届け このメロディ";
+  const anchorX = d.align === "center" ? W / 2 : col(2);
+  const anchor = d.align === "center" ? "middle" : "start";
+  const size = scene === "chorus" ? 40 : 30;
+  const floor = H * 0.74;
+  let props = "";
+  if (scene === "verse") {
+    // 墓石3つ（raised）と、灯（accent）を持つカボチャ1つ
+    [[300, 46], [350, 56], [410, 40]].forEach(([x, h]) => {
+      props += `<path d="M${x - 16} ${floor} V${floor - h + 16} a16 16 0 0 1 32 0 V${floor} Z" fill="${d.raised}" stroke="${d.line}"/>`;
+    });
+    props += `<ellipse cx="250" cy="${floor - 14}" rx="22" ry="16" fill="${d.raised}" stroke="${d.line}"/>`;
+    props += `<path d="M240 ${floor - 18} l5 -7 l5 7 Z M255 ${floor - 18} l5 -7 l5 7 Z M240 ${floor - 8} h20 l-4 4 h-12 Z" fill="${d.accent}"/>`;
+  } else {
+    // 柱2本（raised）と、同じ灯がろうそくの列になる（accent）
+    [300, 420].forEach(x => { props += `<rect x="${x - 12}" y="${H * 0.18}" width="24" height="${floor - H * 0.18}" fill="${d.raised}" stroke="${d.line}"/>`; });
+    for (let i = 0; i < 5; i++) { const x = 320 + i * 20; props += `<rect x="${x - 2}" y="64" width="4" height="12" fill="${d.raised}"/><ellipse cx="${x}" cy="60" rx="3" ry="5" fill="${d.accent}"/>`; }
+    props += `<path d="M310 76 Q360 96 410 76" fill="none" stroke="${d.line}" stroke-width="2"/>`;
+  }
+  // グリッド（12カラム）は細い線で控えめに示す
+  const grid = Array.from({ length: 12 }, (_, i) => `<line x1="${col(i + 1)}" y1="0" x2="${col(i + 1)}" y2="${H}" stroke="${d.ink}" stroke-opacity="0.06"/>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${d.name} ${scene === "verse" ? "Aメロ" : "サビ"}">
+    <rect width="${W}" height="${H}" fill="${d.ground}"/>${grid}
+    <rect x="0" y="${floor}" width="${W}" height="${H - floor}" fill="${d.raised}"/>
+    <line x1="0" y1="${floor}" x2="${W}" y2="${floor}" stroke="${d.line}"/>
+    ${props}
+    <text x="${anchorX}" y="${H * 0.42}" text-anchor="${anchor}" font-family="${d.display}" font-weight="${d.weight || 700}" font-size="${size}" fill="${scene === "chorus" ? d.accent : d.ink}">${word}</text>
+    <text x="${W / 2}" y="${H * 0.93}" text-anchor="middle" font-family="'Noto Sans JP', sans-serif" font-size="16" fill="${d.muted}">${caption}</text>
+  </svg>`;
+}
+document.getElementById("grid").innerHTML = dirs.map(d => `
+  <article class="card${d.win ? " win" : ""}">
+    <h2>${d.id}. ${d.name}${d.win ? ' <span class="badge">採用</span>' : ""}</h2>
+    <div class="frames"><div>${frame(d, "verse")}<div class="cap">Aメロ（墓場）</div></div><div>${frame(d, "chorus")}<div class="cap">サビ（舞踏会）— 同じ灯がろうそくに</div></div></div>
+    <dl><dt>考え方</dt><dd>${d.note}</dd><dt>地 / アクセント</dt><dd>${d.ground} / ${d.accent}</dd><dt>コントラスト</dt><dd>${d.cr}</dd></dl>
+  </article>`).join("");
+</script>
+</body>
+</html>
