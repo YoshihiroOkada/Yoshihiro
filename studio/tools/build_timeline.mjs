@@ -101,6 +101,14 @@ const snap = t => {
   return best;
 };
 
+// 場面の切り替え（サビへ上がる / 戻る）は小節の頭（ダウンビート）に合わせる（講座 step 9 の図）
+const snapDown = t => {
+  if (!beats || !beats.downbeats || !beats.downbeats.length) return t;
+  let best = t, bd = 1.0;
+  for (const b of beats.downbeats) { const d = Math.abs(b - t); if (d < bd) { bd = d; best = b; } }
+  return best;
+};
+
 // ---------------- サビ（! 行）の区間 ----------------
 const chorus = [];
 for (const l of lines.filter(l => l.emph)) {
@@ -118,6 +126,8 @@ const rand = (seed => () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t =
 const scenes = [];
 const TRANS = M.sceneMove;
 // その時刻に始まる場面の移動（サビへ上がる / 戻る）の開始時刻
+// 移動の「着地」を小節の頭にそろえる: サビ開始（a）とサビの終わりの移動開始（b - TRANS）をダウンビートへ
+for (const c of chorus) { c[0] = snapDown(c[0]); c[1] = snapDown(c[1] - TRANS) + TRANS; }
 const sceneMoves = chorus.flatMap(([a, b]) => [a - TRANS, b - TRANS]);
 scenes.push({ id: 'OPEN', kind: 'open', start: 0, end: lines[0].start, teaches: '冒頭の絵（Question）: 墓の上に置かれた仮面' });
 // 行 i の直前のカメラ移動の長さ（前の行との間隔の 30% まで、最大 cameraMove）
