@@ -366,14 +366,17 @@
     // =====================================================================
     // [FX] Glitchify / Deep Glow 風（マーカーで発動）
     // =====================================================================
+    // 光過敏への配慮: 0.34秒より詰まったマーカーは無視して、発動を「1秒に3回以下」に抑える
     var ENV_FN = [
         'function mvEnv(hold, decay) {',
-        '  var m = thisLayer.marker;',
-        '  if (m.numKeys < 1) return 0;',
-        '  var n = m.nearestKey(time).index;',
-        '  if (m.key(n).time > time) n--;',
-        '  if (n < 1) return 0;',
-        '  var t = time - m.key(n).time;',
+        '  var m = thisLayer.marker, minGap = 0.34, last = -1e9;',
+        '  for (var k = 1; k <= m.numKeys; k++) {',
+        '    var tk = m.key(k).time;',
+        '    if (tk > time) break;',
+        '    if (tk - last >= minGap) last = tk;',
+        '  }',
+        '  if (last < -1e8) return 0;',
+        '  var t = time - last;',
         '  return t < hold ? 1 : Math.exp(-decay * (t - hold));',
         '}'
     ].join("\n");
