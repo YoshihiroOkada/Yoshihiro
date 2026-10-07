@@ -1,20 +1,24 @@
 ﻿#targetengine "MVCamera3DToolkit"
 /*
- * MV_Camera3DToolkit.jsx  -  歌ってみたMV用 3Dカメラ＆立ち絵＆3D空間ツールパネル (After Effects)
+ * MV_Camera3DToolkit.jsx  -  歌ってみたMV用 3Dカメラ＆立ち絵ツールパネル (After Effects)
  *
- *  [リグ]     1つのコントローラーで操作できる3Dカメラリグ（オービット/チルト/ロール/ドリー/トラック/ズーム）
- *             選択レイヤーへのフライトゥ
- *  [ムーブ]   プッシュイン、オービット、ドリーズーム、ウィップなどをワンクリックでキーフレーム化
- *  [揺れ/ピント] 手ブレプリセット、マーカーで発動するインパクト揺れ、オートフォーカス
- *  [立ち絵]   立ち絵・背景を奥行き配置（パララックス）、カメラ固定、ふわふわ呼吸、登場アニメ
- *  [3D空間]   無限グリッド床、グリッドルーム、浮遊パネル、星空、雰囲気ライト
+ * 方針は CLAUDE.md（参考プロンプトを例外なしで適用）:
+ *   ・カメラは考えと考えの間で構図を変え、文字が読まれている間は止まる → 手ブレ・揺れ・衝撃揺れは無し
+ *   ・動きは独自イージングで落ち着く（バウンス無し）。動きは意味（場所・順番・大きさ）のためだけ
+ *   ・立ち絵は本物の素材として、奥行きに置くだけ（ふわふわ等の常時の動きは付けない）
  *
- * 使い方: Scripts/ScriptUI Panels に入れて「ウィンドウ」メニューから開く（ドッキング可）
- *         または ファイル > スクリプト > スクリプトファイルを実行（フローティングで開く）
+ *  [リグ]   1つのコントローラーで操作できる3Dカメラリグ（オービット/チルト/ロール/ドリー/トラック/ズーム）
+ *           フライトゥ、ターゲット巡回、ルックアット
+ *  [ムーブ] プッシュイン、オービット、ドリーズームなどをワンクリックでキーフレーム化
+ *  [ピント] オートフォーカス、DepthFade
+ *  [立ち絵] 立ち絵・背景の奥行き配置（パララックス）、カメラ固定、登場アニメ
+ *
+ * 使い方: Scripts/ScriptUI Panels に MV_Tokens.jsxinc と一緒に入れ、「ウィンドウ」メニューから開く
  */
+#include "MV_Tokens.jsxinc"
 (function (thisObj) {
     var NAME = "MV Camera 3D Toolkit";
-    var VERSION = "1.0.0";
+    var VERSION = "2.0.0";
     var CC = "CAM_CONTROL";
     var C_REF = 'var c = thisComp.layer("' + CC + '");';
 
@@ -26,23 +30,9 @@
         return isNaN(n) ? fallback : n;
     }
 
-    function hexToRgb(hex, fallback) {
-        var h = String(hex).replace(/^[\s#]+|\s+$/g, "");
-        if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
-        if (!/^[0-9a-fA-F]{6}$/.test(h)) return fallback;
-        return [parseInt(h.substr(0, 2), 16) / 255, parseInt(h.substr(2, 2), 16) / 255, parseInt(h.substr(4, 2), 16) / 255];
-    }
 
     function rgba(c) { return [c[0], c[1], c[2], 1]; }
 
-    function Rng(seed) {
-        var s = Math.abs(Math.floor(seed)) % 4294967296 || 12345;
-        this.next = function () {
-            s = (s * 1664525 + 1013904223) % 4294967296;
-            return s / 4294967296;
-        };
-    }
-    Rng.prototype.range = function (a, b) { return a + (b - a) * this.next(); };
 
     function tr(layer) { return layer.property("ADBE Transform Group"); }
 
@@ -104,7 +94,7 @@
 
     // 背景(2D)より上・調整レイヤーより下に3Dレイヤーを並べる
     function arrangeBehindFx(comp, L) {
-        var bg = findLayer(comp, "BG_GRADIENT");
+        var bg = findLayer(comp, "BG_GROUND");
         if (bg && bg !== L) L.moveBefore(bg);
     }
 
@@ -182,32 +172,8 @@
     // =====================================================================
     // エクスプレッション
     // =====================================================================
-    var IMPACT_FN = [
-        'function mvImpact(c) {',
-        '  var m = c.marker;',
-        '  if (m.numKeys < 1) return 0;',
-        '  var n = m.nearestKey(time).index;',
-        '  if (m.key(n).time > time) n--;',
-        '  if (n < 1) return 0;',
-        '  var t = time - m.key(n).time;',
-        '  return c.effect("Impact Amount")(1) * Math.exp(-c.effect("Impact Decay")(1) * t);',
-        '}'
-    ].join("\n");
-
-    var EXPR_CAM_POS = [
-        IMPACT_FN, C_REF,
-        'var sh = sub(wiggle(c.effect("Shake Freq")(1), c.effect("Shake Pos")(1)), value);',
-        'var im = mvImpact(c);',
-        'var hit = [noise(time * 24) * im, noise(time * 24 + 50) * im, 0];',
-        'add(add([c.effect("Truck X")(1), c.effect("Pedestal Y")(1), -c.effect("Distance")(1)], sh), hit)'
-    ].join("\n");
-
-    var EXPR_CAM_RX = C_REF + '\nwiggle(c.effect("Shake Freq")(1), c.effect("Shake Rot")(1) * 0.6)';
-    var EXPR_CAM_RY = C_REF + '\nwiggle(c.effect("Shake Freq")(1), c.effect("Shake Rot")(1) * 0.6)';
-    var EXPR_CAM_RZ = [
-        IMPACT_FN, C_REF,
-        'c.effect("Roll")(1) + wiggle(c.effect("Shake Freq")(1), c.effect("Shake Rot")(1)) + noise(time * 20 + 99) * mvImpact(c) * 0.04'
-    ].join("\n");
+    // カメラは揺らさない: 位置はコントローラーの値そのもの（時間の純関数）
+    var EXPR_CAM_POS = C_REF + '\n[c.effect("Truck X")(1), c.effect("Pedestal Y")(1), -c.effect("Distance")(1)]';
 
     var EXPR_FOCUS = [
         C_REF,
@@ -226,39 +192,6 @@
     ].join("\n");
 
     function exprCtrl(name) { return C_REF + '\nc.effect("' + name + '")(1)'; }
-
-    var EXPR_FLOAT_POS = [
-        'var a = effect("Float Amount")(1), s = effect("Float Speed")(1);',
-        'seedRandom(index, true);',
-        'var ph = random(6.28);',
-        'var y = Math.sin(time * s * 2 * Math.PI + ph) * a;',
-        'value.length > 2 ? add(value, [0, y, 0]) : add(value, [0, y])'
-    ].join("\n");
-
-    var EXPR_FLOAT_SCALE = [
-        'var b = effect("Breath %")(1) / 100, s = effect("Float Speed")(1);',
-        'seedRandom(index, true);',
-        'var k = 1 + b * Math.sin(time * s * 2 * Math.PI * 1.3 + random(6.28));',
-        'value.length > 2 ? [value[0], value[1] * k, value[2]] : [value[0], value[1] * k]'
-    ].join("\n");
-
-    var EXPR_FLOAT_ROT = [
-        'seedRandom(index, true);',
-        'value + Math.sin(time * effect("Float Speed")(1) * Math.PI + random(6.28)) * effect("Sway°")(1)'
-    ].join("\n");
-
-    // 無限グリッド床：カメラ直下にスナップして付いてくる（線はワールドに固定されて見える）
-    function exprGridFollow(step) {
-        return [
-            'try {',
-            '  var p = thisComp.activeCamera.toWorld([0, 0, 0]);',
-            '  [Math.round(p[0] / ' + step + ') * ' + step + ', value[1], Math.round(p[2] / ' + step + ') * ' + step + '];',
-            '} catch (err) { value; }'
-        ].join("\n");
-    }
-
-    var EXPR_SKY_FOLLOW = 'try { add(value, thisComp.activeCamera.toWorld([0, 0, 0])); } catch (err) { value; }';
-    var EXPR_TWINKLE = 'seedRandom(index, true);\nvalue * (0.6 + 0.4 * Math.sin(time * random(1, 4) + random(6.28)))';
 
     // ルックアット: Target と「見続けるレイヤー」を Look At Mix(%) で混ぜる
     var EXPR_TARGET = [
@@ -324,11 +257,6 @@
         addSlider(ctrl, "Zoom", dist);
         addSlider(ctrl, "Truck X", 0);
         addSlider(ctrl, "Pedestal Y", 0);
-        addSlider(ctrl, "Shake Pos", 0);
-        addSlider(ctrl, "Shake Rot", 0);
-        addSlider(ctrl, "Shake Freq", 1.5);
-        addSlider(ctrl, "Impact Amount", 40);
-        addSlider(ctrl, "Impact Decay", 7);
         addCheckbox(ctrl, "DOF", 0);
         addCheckbox(ctrl, "Auto Focus", 0);
         addFx(ctrl, "ADBE Layer Control", "Focus Layer");
@@ -366,9 +294,7 @@
         tr(cam).property("ADBE Rotate Y").setValue(0);
         tr(cam).property("ADBE Rotate Z").setValue(0);
         tr(cam).property("ADBE Position").expression = EXPR_CAM_POS;
-        tr(cam).property("ADBE Rotate X").expression = EXPR_CAM_RX;
-        tr(cam).property("ADBE Rotate Y").expression = EXPR_CAM_RY;
-        tr(cam).property("ADBE Rotate Z").expression = EXPR_CAM_RZ;
+        tr(cam).property("ADBE Rotate Z").expression = exprCtrl("Roll");
 
         var opt = cam.property("ADBE Camera Options Group");
         opt.property("ADBE Camera Zoom").expression = exprCtrl("Zoom");
@@ -501,58 +427,8 @@
     }
 
     // =====================================================================
-    // [揺れ/ピント]
+    // [ピント]
     // =====================================================================
-    var SHAKES = [
-        { label: "なし",                     pos: 0,  rot: 0,   freq: 1.5 },
-        { label: "手持ち（自然）",           pos: 6,  rot: 0.6, freq: 1.2 },
-        { label: "手持ち（ゆったり）",       pos: 4,  rot: 0.4, freq: 0.6 },
-        { label: "手持ち（ドキュメンタリー）", pos: 10, rot: 1,   freq: 1.8 },
-        { label: "歩き",                     pos: 14, rot: 1.2, freq: 2.0 },
-        { label: "走り",                     pos: 28, rot: 2.5, freq: 3.2 },
-        { label: "ドローン（浮遊）",         pos: 10, rot: 0.3, freq: 0.35 },
-        { label: "水中（ゆらゆら）",         pos: 18, rot: 1.5, freq: 0.25 },
-        { label: "夢の中（ふわっ）",         pos: 12, rot: 0.8, freq: 0.15 },
-        { label: "呼吸（ほぼ静止）",         pos: 2,  rot: 0.2, freq: 0.3 },
-        { label: "緊張感（細かく）",         pos: 4,  rot: 0.8, freq: 6 },
-        { label: "ホラー（不安定）",         pos: 8,  rot: 2,   freq: 3.5 },
-        { label: "車載",                     pos: 6,  rot: 0.5, freq: 8 },
-        { label: "電車",                     pos: 3,  rot: 0.3, freq: 12 },
-        { label: "ヘリ",                     pos: 9,  rot: 0.7, freq: 14 },
-        { label: "ライブ会場（ノリ）",       pos: 16, rot: 1.4, freq: 2.2 },
-        { label: "激しい（サビ）",           pos: 30, rot: 3,   freq: 5 },
-        { label: "爆発の余波",               pos: 45, rot: 4,   freq: 7 },
-        { label: "地震",                     pos: 60, rot: 5,   freq: 10 },
-        { label: "グリッチ（ガタガタ）",     pos: 20, rot: 0,   freq: 24 },
-        { label: "酔っぱらい",               pos: 25, rot: 6,   freq: 0.5 }
-    ];
-
-    function applyShake(comp, sh) {
-        var ctrl = getCtrl(comp);
-        var t = comp.time;
-        setAt(ctrlProp(ctrl, "Shake Pos"), t, sh.pos);
-        setAt(ctrlProp(ctrl, "Shake Rot"), t, sh.rot);
-        setAt(ctrlProp(ctrl, "Shake Freq"), t, sh.freq);
-    }
-
-    function addImpactNow(comp, amount) {
-        var ctrl = getCtrl(comp);
-        ctrlProp(ctrl, "Impact Amount").setValue(amount);
-        ctrl.property("ADBE Marker").setValueAtTime(comp.time, new MarkerValue("impact"));
-    }
-
-    function copyMarkersToImpact(comp, amount) {
-        var ctrl = getCtrl(comp);
-        var sel = comp.selectedLayers;
-        if (sel.length !== 1 || sel[0] === ctrl) throw new Error("マーカーを打ったレイヤー（音源など）を1つ選択してください。");
-        var src = sel[0].property("ADBE Marker");
-        if (src.numKeys === 0) throw new Error("選択レイヤーにマーカーがありません。");
-        ctrlProp(ctrl, "Impact Amount").setValue(amount);
-        var dst = ctrl.property("ADBE Marker");
-        for (var k = 1; k <= src.numKeys; k++) dst.setValueAtTime(src.keyTime(k), new MarkerValue("impact"));
-        return src.numKeys;
-    }
-
     function autoFocus(comp, o) {
         var ctrl = getCtrl(comp);
         var sel = selectedAV(comp);
@@ -569,31 +445,8 @@
     }
 
     // =====================================================================
-    // [立ち絵] 奥行き配置・ふわふわ・登場
+    // [立ち絵] 奥行き配置・登場（常時の動きは付けない）
     // =====================================================================
-    function setAnchorBottom(L, t) {
-        var A = tr(L).property("ADBE Anchor Point");
-        var P = tr(L).property("ADBE Position");
-        if (A.numKeys > 0 || P.numKeys > 0) return;
-        var r = L.sourceRectAtTime(t, false);
-        var a0 = A.value, p0 = P.value, s = tr(L).property("ADBE Scale").value;
-        var a1x = r.left + r.width / 2, a1y = r.top + r.height;
-        var dx = (a1x - a0[0]) * s[0] / 100, dy = (a1y - a0[1]) * s[1] / 100;
-        A.setValue(a0.length > 2 ? [a1x, a1y, a0[2]] : [a1x, a1y]);
-        P.setValue(p0.length > 2 ? [p0[0] + dx, p0[1] + dy, p0[2]] : [p0[0] + dx, p0[1] + dy]);
-    }
-
-    function addFloat(L) {
-        var fxp = L.property("ADBE Effect Parade");
-        if (fxp.property("Float Amount")) return;
-        addSlider(L, "Float Amount", 10);
-        addSlider(L, "Float Speed", 0.35);
-        addSlider(L, "Breath %", 1.2);
-        addSlider(L, "Sway°", 0.6);
-        tr(L).property("ADBE Position").expression = EXPR_FLOAT_POS;
-        tr(L).property("ADBE Scale").expression = EXPR_FLOAT_SCALE;
-        tr(L).property("ADBE Rotate Z").expression = EXPR_FLOAT_ROT;
-    }
 
     // 選択レイヤーを 上=手前 / 下=奥 に並べ、今の見た目の大きさを保ったまま3D化
     function placeTachie(comp, o) {
@@ -615,10 +468,7 @@
         for (var i = 0; i < n; i++) {
             var L = sel[i];
             if (tr(L).property("ADBE Position").numKeys > 0) { skipped++; continue; }
-            var isBack = n > 1 && i === n - 1;
-            var moving = o.float && !isBack;
             if (L.parent) L.parent = null;
-            if (moving) setAnchorBottom(L, t);
 
             var p = tr(L).property("ADBE Position").value;
             var s = tr(L).property("ADBE Scale").value;
@@ -637,7 +487,6 @@
             tr(L).property("ADBE Position").setValue(pos);
             tr(L).property("ADBE Scale").setValue([s[0] * k, s[1] * k, 100]);
             if (o.billboard && !o.lockToCam) L.autoOrient = AutoOrientType.CAMERA_OR_POINT_OF_INTEREST;
-            if (moving) addFloat(L);
             arrangeBehindFx(comp, L);
         }
         if (skipped) alert(skipped + " 個のレイヤーは位置にキーフレームがあるためスキップしました。", NAME);
@@ -680,169 +529,6 @@
             var bp = L.property("ADBE Effect Parade").property(bi).property(1);
             keyMove(bp, t0, t1, 40, 0, expo);
         }
-    }
-
-    // =====================================================================
-    // [3D空間] 環境生成
-    // =====================================================================
-    // 細い長方形＋リピーターで格子を作る（シェイプレイヤー）
-    function makeGrid(comp, name, w, h, step, lw, color, scroll) {
-        var sl = comp.layers.addShape();
-        sl.name = name;
-        var root = sl.property("ADBE Root Vectors Group");
-        function lines(gname, rw, rh, copies, off, scrollExpr) {
-            var gi = root.addProperty("ADBE Vector Group").propertyIndex;
-            root.property(gi).name = gname;
-            var vg = function () { return root.property(gi).property("ADBE Vectors Group"); };
-            vg().addProperty("ADBE Vector Shape - Rect");
-            vg().addProperty("ADBE Vector Graphic - Fill");
-            vg().addProperty("ADBE Vector Filter - Repeater");
-            vg().property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Size").setValue([rw, rh]);
-            vg().property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(rgba(color));
-            var rep = vg().property("ADBE Vector Filter - Repeater");
-            rep.property("ADBE Vector Repeater Copies").setValue(copies);
-            rep.property("ADBE Vector Repeater Transform").property("ADBE Vector Repeater Position").setValue(off);
-            var gp = root.property(gi).property("ADBE Vector Transform Group").property("ADBE Vector Position");
-            gp.setValue([-off[0] * (copies - 1) / 2, -off[1] * (copies - 1) / 2]);
-            if (scrollExpr) gp.expression = scrollExpr;
-        }
-        var rows = Math.floor(h / step) + 1, cols = Math.floor(w / step) + 1;
-        lines("H_LINES", w, lw, rows, [0, step], scroll ? 'add(value, [0, (time * ' + scroll + ') % ' + step + '])' : null);
-        lines("V_LINES", lw, h, cols, [step, 0], null);
-        sl.threeDLayer = true;
-        var glow = addFx(sl, "ADBE Glo2");
-        setFx(glow, 2, 40);
-        setFx(glow, 3, 25);
-        setFx(glow, 4, 1.2);
-        return sl;
-    }
-
-    function getDotComp(comp) {
-        for (var i = 1; i <= app.project.numItems; i++) {
-            var it = app.project.item(i);
-            if (it instanceof CompItem && it.name === "MV_DOT") return it;
-        }
-        var dot = app.project.items.addComp("MV_DOT", 64, 64, 1, Math.max(comp.duration, 60), comp.frameRate);
-        var s = dot.layers.addSolid([1, 1, 1], "dot", 64, 64, 1, dot.duration);
-        var k = 0.5523, r = 30, c = 32;
-        var sh = new Shape();
-        sh.vertices = [[c, c - r], [c + r, c], [c, c + r], [c - r, c]];
-        sh.inTangents = [[-k * r, 0], [0, -k * r], [k * r, 0], [0, k * r]];
-        sh.outTangents = [[k * r, 0], [0, k * r], [-k * r, 0], [0, -k * r]];
-        sh.closed = true;
-        var m = s.property("ADBE Mask Parade").addProperty("ADBE Mask Atom");
-        m.property("ADBE Mask Shape").setValue(sh);
-        m.property("ADBE Mask Feather").setValue([20, 20]);
-        return dot;
-    }
-
-    var ENVS = [
-        { key: "floor", label: "無限グリッド床（カメラに付いてくる）" },
-        { key: "room",  label: "グリッドルーム（箱の中）" },
-        { key: "panels", label: "浮遊パネル（イラスト額縁用）" },
-        { key: "stars", label: "星空スフィア（カメラに付いてくる）" }
-    ];
-
-    function buildEnv(comp, o) {
-        var sb = sceneBase(comp);
-        var b = sb.p;
-        var col = hexToRgb(o.color, [0.2, 0.8, 1]);
-        var made = [];
-        var rng = new Rng(Math.floor(comp.time * 1000) + 3);
-
-        if (o.type === "floor") {
-            var step = 300;
-            var f = makeGrid(comp, "ENV_GRID_FLOOR", 12000, 12000, step, 4, col, 0);
-            tr(f).property("ADBE Rotate X").setValue(90);
-            tr(f).property("ADBE Position").setValue([b[0], b[1] + 700, b[2]]);
-            tr(f).property("ADBE Position").expression = exprGridFollow(step);
-            tr(f).property("ADBE Opacity").setValue(70);
-            made.push(f);
-        } else if (o.type === "room") {
-            var S = 6000, Hr = 3000, st = 300;
-            var defs = [
-                ["ENV_ROOM_FLOOR", S, S, [b[0], b[1] + Hr / 2, b[2]], [90, 0]],
-                ["ENV_ROOM_CEIL", S, S, [b[0], b[1] - Hr / 2, b[2]], [90, 0]],
-                ["ENV_ROOM_LEFT", S, Hr, [b[0] - S / 2, b[1], b[2]], [0, 90]],
-                ["ENV_ROOM_RIGHT", S, Hr, [b[0] + S / 2, b[1], b[2]], [0, 90]],
-                ["ENV_ROOM_BACK", S, Hr, [b[0], b[1], b[2] + S / 2], [0, 0]]
-            ];
-            for (var i = 0; i < defs.length; i++) {
-                var g = makeGrid(comp, defs[i][0], defs[i][1], defs[i][2], st, 4, col, 0);
-                tr(g).property("ADBE Position").setValue(defs[i][3]);
-                tr(g).property("ADBE Rotate X").setValue(defs[i][4][0]);
-                tr(g).property("ADBE Rotate Y").setValue(defs[i][4][1]);
-                tr(g).property("ADBE Opacity").setValue(55);
-                made.push(g);
-            }
-        } else if (o.type === "panels") {
-            for (i = 0; i < o.count; i++) {
-                var pl = comp.layers.addShape();
-                pl.name = "ENV_PANEL_" + (i + 1);
-                var root = pl.property("ADBE Root Vectors Group");
-                var gi = root.addProperty("ADBE Vector Group").propertyIndex;
-                var vg = root.property(gi).property("ADBE Vectors Group");
-                vg.addProperty("ADBE Vector Shape - Rect");
-                root.property(gi).property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Stroke");
-                root.property(gi).property("ADBE Vectors Group").addProperty("ADBE Vector Graphic - Fill");
-                vg = root.property(gi).property("ADBE Vectors Group");
-                var pw = Math.round(rng.range(300, 900));
-                vg.property("ADBE Vector Shape - Rect").property("ADBE Vector Rect Size").setValue([pw, Math.round(pw * rng.range(0.5, 1.4))]);
-                vg.property("ADBE Vector Graphic - Stroke").property("ADBE Vector Stroke Color").setValue(rgba(col));
-                vg.property("ADBE Vector Graphic - Stroke").property("ADBE Vector Stroke Width").setValue(4);
-                vg.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Color").setValue(rgba(col));
-                vg.property("ADBE Vector Graphic - Fill").property("ADBE Vector Fill Opacity").setValue(8);
-                pl.threeDLayer = true;
-                tr(pl).property("ADBE Position").setValue([
-                    b[0] + rng.range(-2500, 2500), b[1] + rng.range(-1200, 1200), b[2] + rng.range(-400, 4000)]);
-                tr(pl).property("ADBE Rotate X").setValue(rng.range(-10, 10));
-                tr(pl).property("ADBE Rotate Y").setValue(rng.range(-35, 35));
-                tr(pl).property("ADBE Rotate Z").setValue(rng.range(-6, 6));
-                addFloat(pl);
-                made.push(pl);
-            }
-        } else if (o.type === "stars") {
-            var dot = getDotComp(comp);
-            var R = 5000;
-            for (i = 0; i < o.count; i++) {
-                var sL = comp.layers.add(dot, comp.duration);
-                sL.name = "ENV_STAR_" + (i + 1);
-                sL.threeDLayer = true;
-                sL.autoOrient = AutoOrientType.CAMERA_OR_POINT_OF_INTEREST;
-                var th = rng.range(0, Math.PI * 2), ph = Math.acos(rng.range(-1, 1)), rr = R * rng.range(0.8, 1.2);
-                tr(sL).property("ADBE Position").setValue([
-                    rr * Math.sin(ph) * Math.cos(th), rr * Math.cos(ph), rr * Math.sin(ph) * Math.sin(th)]);
-                tr(sL).property("ADBE Position").expression = EXPR_SKY_FOLLOW;
-                var sc = rng.range(30, 140);
-                tr(sL).property("ADBE Scale").setValue([sc, sc, sc]);
-                tr(sL).property("ADBE Opacity").setValue(rng.range(40, 100));
-                tr(sL).property("ADBE Opacity").expression = EXPR_TWINKLE;
-                sL.shy = true;
-                made.push(sL);
-            }
-            comp.hideShyLayers = true;
-        }
-        for (i = 0; i < made.length; i++) {
-            made[i].label = 13;
-            var bg = findLayer(comp, "BG_GRADIENT");
-            if (bg) made[i].moveBefore(bg);
-            else made[i].moveToEnd();
-        }
-        return made.length;
-    }
-
-    function addMoodLights(comp, hex) {
-        var sb = sceneBase(comp);
-        var b = sb.p;
-        var col = hexToRgb(hex, [0.2, 0.8, 1]);
-        var amb = comp.layers.addLight("LIGHT_AMBIENT", [comp.width / 2, comp.height / 2]);
-        amb.lightType = LightType.AMBIENT;
-        amb.property("ADBE Light Options Group").property("ADBE Light Intensity").setValue(65);
-        var pt = comp.layers.addLight("LIGHT_KEY", [comp.width / 2, comp.height / 2]);
-        pt.lightType = LightType.POINT;
-        tr(pt).property("ADBE Position").setValue([b[0] - 600, b[1] - 800, b[2] - 700]);
-        pt.property("ADBE Light Options Group").property("ADBE Light Intensity").setValue(90);
-        pt.property("ADBE Light Options Group").property("ADBE Light Color").setValue(rgba(col));
     }
 
     // =====================================================================
@@ -967,23 +653,9 @@
             })(MOVES[i]), 104);
         }
 
-        // --- 揺れ・ピント ---
-        var tFx = tabs.add("tab", undefined, "揺れ/ピント");
+        // --- ピント ---
+        var tFx = tabs.add("tab", undefined, "ピント");
         tFx.alignChildren = ["fill", "top"];
-        var pS = tFx.add("panel", undefined, "カメラの揺れ");
-        pS.alignChildren = ["left", "top"];
-        g = row(pS);
-        var ddShake = dropdown(g, SHAKES, 1);
-        btn(g, "適用", run("揺れ", function (comp) { applyShake(comp, SHAKES[ddShake.selection.index]); }), 70);
-        g = row(pS);
-        var etImp = field(g, "インパクト強さ:", "40", 4);
-        btn(g, "今の時間に衝撃", run("インパクト", function (comp) { addImpactNow(comp, num(etImp.text, 40)); }), 110);
-        g = row(pS);
-        btn(g, "選択レイヤーのマーカーを衝撃に", run("インパクト", function (comp) {
-            return copyMarkersToImpact(comp, num(etImp.text, 40)) + " 個のマーカーをインパクトにしました。";
-        }), 230);
-        note(pS, "音源にビートのマーカーを打って↑を押すと、キックに合わせてカメラがドンと揺れます。");
-
         var pF = tFx.add("panel", undefined, "ピント（被写界深度）");
         pF.alignChildren = ["left", "top"];
         g = row(pF);
@@ -1006,15 +678,13 @@
         var etNear = field(g, "手前(px):", "0", 5);
         var etFar = field(g, "奥(px):", "2500", 5);
         g = row(pP);
-        var cbFloat = g.add("checkbox", undefined, "ふわふわ呼吸");
-        cbFloat.value = true;
         var cbLock = g.add("checkbox", undefined, "カメラに固定(常に画面内)");
         var cbBill = g.add("checkbox", undefined, "常にカメラを向く");
         g = row(pP);
         btn(g, "選択レイヤーを3D配置", run("立ち絵配置", function (comp) {
             placeTachie(comp, {
                 near: num(etNear.text, 0), far: num(etFar.text, 2500),
-                float: cbFloat.value, lockToCam: cbLock.value, billboard: cbBill.value
+                lockToCam: cbLock.value, billboard: cbBill.value
             });
         }), 180);
         note(pP, "歌詞MV（MV_LyricBuilderで作ったコンポ）では「カメラに固定」がおすすめ。");
@@ -1028,23 +698,6 @@
             o.style = ENTRANCES[ddEnt.selection.index].key;
             entrance(comp, o);
         }), 150);
-
-        // --- 3D空間 ---
-        var tEnv = tabs.add("tab", undefined, "3D空間");
-        tEnv.alignChildren = ["fill", "top"];
-        g = row(tEnv);
-        var ddEnv = dropdown(g, ENVS, 0);
-        g = row(tEnv);
-        var etCol = field(g, "色:", "#33CCFF", 7);
-        var etCount = field(g, "個数(パネル/星):", "14", 4);
-        g = row(tEnv);
-        btn(g, "3D空間を生成", run("3D空間", function (comp) {
-            var type = ENVS[ddEnv.selection.index].key;
-            var cnt = Math.max(1, Math.min(600, Math.round(num(etCount.text, type === "stars" ? 200 : 14))));
-            buildEnv(comp, { type: type, color: etCol.text, count: cnt });
-        }), 130);
-        btn(g, "雰囲気ライト追加", run("ライト", function (comp) { addMoodLights(comp, etCol.text); }), 130);
-        note(tEnv, "リグがあればターゲット周辺、無ければコンポ中央に作ります。ライトは3Dレイヤー全体の明るさに影響します。");
 
         tabs.selection = tRig;
 

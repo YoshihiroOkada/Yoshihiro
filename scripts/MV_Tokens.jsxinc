@@ -1,4 +1,4 @@
-// MV_Tokens.jsxinc — 全スクリプト共通のデザイントークン（brand/TOKENS.md と同じ値に保つ）
+﻿// MV_Tokens.jsxinc — 全スクリプト共通のデザイントークン（brand/TOKENS.md と同じ値に保つ）
 // 各スクリプトと同じフォルダに置き、#include "MV_Tokens.jsxinc" で読み込む。
 var MV_TOKENS = {
     color: {
