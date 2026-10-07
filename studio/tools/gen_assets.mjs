@@ -1,7 +1,7 @@
 // node tools/gen_assets.mjs [--only mask,tomb] [--force]
 // MVの絵を OpenAI 画像API（ChatGPT の画像生成）で作る。図形で代用しない。
 //   キー: 環境変数 OPENAI_API_KEY（ログにもファイルにも出さない）
-//   モデル: OPENAI_IMAGE_MODEL（既定 gpt-image-1）
+//   モデル: OPENAI_IMAGE_MODEL（既定 gpt-image-2。gpt-image-1 は 2026-10-23 提供終了予定）
 //   出力: assets/img/<id>.png と assets/manifest.json
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
@@ -19,7 +19,7 @@ if (!key) {
   console.error('OPENAI_API_KEY がありません。環境の設定（Network secrets / 環境変数）に追加してから、新しいセッションで実行してください。');
   process.exit(2);
 }
-const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1';
+const model = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2';
 
 const list = JSON.parse(readFileSync(resolve(STUDIO, 'assets/asset_list.json'), 'utf8'));
 const manifestPath = resolve(STUDIO, 'assets/manifest.json');
